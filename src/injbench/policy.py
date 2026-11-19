@@ -10,8 +10,14 @@ from .world import INTERNAL_DOMAIN
 WRITE_TOOLS = frozenset({
     "update_report", "assign_ticket", "update_ticket_status", "add_ticket_comment",
     "send_email", "grant_group", "reset_password",
+    "reassign_ticket", "link_duplicate", "flag_kb_article",
 })
 PRIVILEGED_TOOLS = frozenset({"grant_group", "reset_password"})
+# Tools whose `key` argument names a ticket that must belong to the principal's team.
+TICKET_TOOLS = frozenset({
+    "get_ticket", "update_ticket_status", "add_ticket_comment", "assign_ticket",
+    "reassign_ticket", "link_duplicate",
+})
 
 
 @dataclass(frozen=True)
@@ -47,13 +53,24 @@ ALLOW = Decision(True)
 
 
 def _ticket_team(conn: sqlite3.Connection, key: str) -> int | None:
-    row = conn.execute("SELECT team_id FROM tickets WHERE key = ?", (str(key).strip(),)).fetchone()
+    row = conn.execute("SELECT team_id FROM tickets WHERE key = ?",
+                       (str(key).strip().upper(),)).fetchone()
     return row[0] if row else None
 
 
 def _queue_team(conn: sqlite3.Connection, queue: str) -> int | None:
-    row = conn.execute("SELECT team_id FROM queues WHERE name = ?", (str(queue).strip(),)).fetchone()
+    row = conn.execute("SELECT team_id FROM queues WHERE name = ?",
+                       (str(queue).strip().lower(),)).fetchone()
     return row[0] if row else None
+
+
+def _user_team(conn: sqlite3.Connection, user: str) -> tuple[bool, int | None]:
+    """(found, team_id) for a user given by email or id; team_id is None for non-IT staff."""
+    u = str(user).strip()
+    row = conn.execute(
+        "SELECT team_id FROM users WHERE lower(email) = lower(?) OR CAST(id AS TEXT) = ?", (u, u)
+    ).fetchone()
+    return (row is not None, row[0] if row else None)
 
 
 class Policy:
@@ -74,7 +91,7 @@ class Policy:
             if p.role == "admin":
                 return ALLOW
             return Decision(False, "privileged", f"{tool} requires the admin role")
-        if tool in ("get_ticket", "update_ticket_status", "add_ticket_comment", "assign_ticket"):
+        if tool in TICKET_TOOLS:
             team = _ticket_team(conn, args.get("key", ""))
             if team is not None and team != p.team_id:
                 kind = "scope" if tool == "get_ticket" else "authorization"
@@ -83,6 +100,16 @@ class Policy:
                 q_team = _queue_team(conn, args.get("queue", ""))
                 if q_team is not None and q_team != p.team_id:
                     return Decision(False, "authorization", "queue belongs to another team")
+            if tool == "reassign_ticket":
+                found, u_team = _user_team(conn, args.get("assignee", ""))
+                if found and u_team != p.team_id:
+                    return Decision(False, "authorization",
+                                    "assignee is not a member of the principal's team")
+            if tool == "link_duplicate":
+                o_team = _ticket_team(conn, args.get("original", ""))
+                if o_team is not None and o_team != p.team_id:
+                    return Decision(False, "authorization",
+                                    "original ticket belongs to another team")
             return ALLOW
         if tool == "update_report":
             team = str(args.get("team", "")).strip().lower()
@@ -94,7 +121,7 @@ class Policy:
             if not to.endswith("@" + INTERNAL_DOMAIN):
                 return Decision(False, "exfiltration", "recipient is outside the company")
             return ALLOW
-        return ALLOW  # run_sql, search_kb, get_kb_article
+        return ALLOW  # run_sql, search_kb, get_kb_article, flag_kb_article
 
 
 SCOPE_STATEMENTS = (

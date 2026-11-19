@@ -111,7 +111,8 @@ def cmd_calibrate(args) -> int:
     except DetectorUnavailable as e:
         return _unavailable(e)
     cal = calibrate(tag, args.detector, args.checkpoint, det.score_segments, root=args.root,
-                    target_fpr=args.target_fpr, device=det.device, force=args.force)
+                    target_fpr=args.target_fpr, device=det.device, force=args.force,
+                    min_threshold=args.min_threshold)
     print(f"{tag}: threshold {cal.threshold:.4f} (log-odds; p = {cal.threshold_prob:.6f}) at "
           f"target FPR {cal.target_fpr}")
     print(f"  val FPR {_pct(cal.val['fpr'])}, val recall {_pct(cal.val['recall'])}, "
@@ -259,7 +260,8 @@ def cmd_all(args) -> int:
     for detector in ("modernbert", "promptguard2"):
         common = dict(detector=detector, checkpoint=None, tag=detector, batch_size=32)
         if not calibration_path(detector, root).exists():
-            r = cmd_calibrate(_ns(args, target_fpr=0.01, force=False, **common))
+            r = cmd_calibrate(_ns(args, target_fpr=0.01, force=False, min_threshold=None,
+                                  **common))
             if r:
                 rc = r
                 continue
@@ -324,6 +326,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--tag", default=None, help="calibration name (default: the detector name)")
     c.add_argument("--target-fpr", type=float, default=0.01)
     c.add_argument("--force", action="store_true", help="overwrite a frozen threshold")
+    c.add_argument("--min-threshold", type=float, default=None,
+                   help="optional floor in log-odds (off by default; 0 = never flag p < 0.5)")
     c.set_defaults(fn=cmd_calibrate)
 
     e = sub.add_parser("evaluate", help="test metrics at the frozen threshold")

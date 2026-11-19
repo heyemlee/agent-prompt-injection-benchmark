@@ -84,15 +84,22 @@ def _write_scores(path: Path, rows: list[dict], scores: Sequence[float]) -> None
 
 def calibrate(tag: str, detector: str, model: str | None, score: Scorer, *,
               root: str | Path | None = None, target_fpr: float = 0.01, device: str = "",
-              force: bool = False) -> Calibration:
+              force: bool = False, min_threshold: float | None = None) -> Calibration:
     """Chooses the threshold on validation benign segments, freezes it, and writes it to
-    `<root>/calibration/<tag>.json`. Validation scores go to `<root>/reports/`."""
+    `<root>/calibration/<tag>.json`. Validation scores go to `<root>/reports/`.
+
+    The threshold is the smallest one with validation FPR <= `target_fpr` (PLAN §8.2).
+    `min_threshold` is an optional floor, off by default: a fine-tuned model can be so confident
+    on validation that the target quantile lands deep in the benign tail (log-odds -15 and
+    below), where any distribution shift crosses it. A floor of 0 never flags a segment the
+    classifier itself scores as more likely benign. The floor only lowers validation FPR."""
     from .detectors import calibration_path, get_spec
 
     rows = load_split(data_dir(root), "val")
     scores = list(score([r["text"] for r in rows]))
     benign = [s for r, s in zip(rows, scores) if r["label"] == 0]
-    threshold = threshold_at_fpr(benign, target_fpr)
+    quantile = threshold_at_fpr(benign, target_fpr)
+    threshold = quantile if min_threshold is None else max(quantile, min_threshold)
     m = metrics(rows, scores, threshold)
     spec = get_spec(detector)
     cal = Calibration(
@@ -104,7 +111,7 @@ def calibrate(tag: str, detector: str, model: str | None, score: Scorer, *,
         chunking={"max_words": MAX_WORDS, "overlap_words": OVERLAP_WORDS,
                   "max_tokens": MAX_TOKENS, "segment_score": "max over chunks"},
         device=device, created=dt.datetime.now().isoformat(timespec="seconds"),
-        injbench_version=__version__)
+        injbench_version=__version__, quantile_threshold=quantile, min_threshold=min_threshold)
     cal.save(calibration_path(tag, root), overwrite=force)
     _write_scores(reports_dir(root) / f"{tag}_val_scores.jsonl", rows, scores)
     (reports_dir(root) / f"{tag}_val.json").write_text(

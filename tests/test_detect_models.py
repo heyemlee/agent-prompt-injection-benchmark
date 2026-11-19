@@ -138,6 +138,12 @@ def test_train_calibrate_evaluate_and_run_the_arm(tiny_model, root, world, monke
     with pytest.raises(FileExistsError):  # frozen
         calibrate("modernbert", "modernbert", None, det.score_segments, root=root)
     assert Calibration.load(root / "calibration" / "modernbert.json").threshold == cal.threshold
+    assert cal.quantile_threshold == cal.threshold and cal.min_threshold is None
+    floored = calibrate("floored", "modernbert", None, det.score_segments, root=root,
+                        min_threshold=cal.threshold + 1.0)
+    assert floored.threshold == cal.threshold + 1.0
+    assert floored.quantile_threshold == cal.threshold
+    assert floored.val["fpr"]["k"] <= cal.val["fpr"]["k"]
 
     rep = evaluate(cal, det.score_segments, root=root)
     assert rep["dataset_matches_calibration"]

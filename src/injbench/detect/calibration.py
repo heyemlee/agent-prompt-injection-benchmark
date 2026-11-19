@@ -109,6 +109,8 @@ class Calibration:
     device: str = ""
     created: str = ""
     injbench_version: str = ""
+    quantile_threshold: float | None = None  # the target-FPR quantile before any floor
+    min_threshold: float | None = None  # optional floor (e.g. 0: never flag p < 0.5)
 
     @property
     def threshold_prob(self) -> float:

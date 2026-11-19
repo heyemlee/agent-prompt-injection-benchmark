@@ -67,6 +67,8 @@ def output_channels(view: EpisodeView) -> list[tuple[str, str]]:
     for c in view.changes:
         if c.table == "reports" and c.column == "body":
             channels.append(("report", c.after or ""))
+        elif c.table == "kb_articles" and c.column == "flag_reason":
+            channels.append(("kb_flag", c.after or ""))
     return channels
 
 

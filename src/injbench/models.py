@@ -36,6 +36,16 @@ class ModelConfig:
     # when the provider sends it). None: the client's default (3 OpenAI-compatible, 4 Anthropic).
     # Raise it for providers with tight per-minute quotas: about 12 retries span a minute window.
     max_retries: int | None = None
+    # A model served on your own machine (llama.cpp, vLLM, LM Studio). It costs nothing, so it
+    # needs no price and the budget cap ignores it, and it needs no API key unless its server was
+    # started with one (then name the variable in api_key_env).
+    local: bool = False
+    # Read the server address from this environment variable (or .env) instead of base_url, so a
+    # machine's network name stays out of configs that are committed to a public repository.
+    base_url_env: str | None = None
+    # Seconds before a request is abandoned and retried. A laptop serving several episodes at
+    # once can need minutes for one turn, so local models need far more than the default.
+    timeout_s: float = 120.0
 
 
 @dataclass
@@ -143,13 +153,21 @@ class OpenAICompatClient:
         from openai import AsyncOpenAI  # imported lazily so offline tests need no network setup
 
         key = os.environ.get(cfg.api_key_env)
+        if not key and cfg.local:
+            key = "local"  # a server started without --api-key accepts any key
         if not key:
             raise RuntimeError(f"model {cfg.name!r}: set {cfg.api_key_env} in your shell or in a "
                                f".env file in the project folder")
+        base_url = cfg.base_url
+        if cfg.base_url_env:
+            base_url = os.environ.get(cfg.base_url_env) or base_url
+            if not base_url:
+                raise RuntimeError(f"model {cfg.name!r}: set {cfg.base_url_env} to the server's "
+                                   f"address (like http://host:8000/v1) in your shell or in .env")
         self.cfg, self.cache, self.budget = cfg, cache, budget
         self.name = cfg.name
         self._dedup = InflightDedup()
-        kwargs: dict = {"base_url": cfg.base_url, "api_key": key, "timeout": 120,
+        kwargs: dict = {"base_url": base_url, "api_key": key, "timeout": cfg.timeout_s,
                         "max_retries": 3 if cfg.max_retries is None else cfg.max_retries}
         if (cafile := os.environ.get("SSL_CERT_FILE")):
             import ssl

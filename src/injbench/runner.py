@@ -247,6 +247,17 @@ async def run_episode(spec: EpisodeSpec, world: World, client, max_steps: int) -
 API_KINDS = ("openai_compat", "anthropic")
 
 
+def check_prices(models: list[ModelConfig], budget_usd: float | None) -> None:
+    """A budget cap can only stop spending it can count: every paid model needs a price."""
+    if budget_usd is None:
+        return
+    for m in models:
+        if not m.local and not (m.price_in_per_m or m.price_out_per_m):
+            raise ValueError(f"model {m.name!r}: set price_in_per_m / price_out_per_m from the "
+                             f"provider's price list (or local = true for a model served on your "
+                             f"own machine), otherwise the budget cap cannot work")
+
+
 def make_api_client(m: ModelConfig, cache: ResponseCache | None, budget: Budget):
     if m.kind == "anthropic":
         from .anthropic_client import AnthropicClient
@@ -283,10 +294,7 @@ async def run_experiment(cfg: RunConfig, run_dir: str | Path | None = None,
         if m.kind not in API_KINDS + ("scripted",):
             raise ValueError(f"model {m.name!r}: unknown kind {m.kind!r}")
     api_models = [m for m in cfg.models if m.kind in API_KINDS]
-    for m in api_models:
-        if cfg.budget_usd is not None and not (m.price_in_per_m or m.price_out_per_m):
-            raise ValueError(f"model {m.name!r}: set price_in_per_m / price_out_per_m from the "
-                             f"provider's price list, otherwise the budget cap cannot work")
+    check_prices(api_models, cfg.budget_usd)
     cache = ResponseCache(cfg.cache_path) if api_models else None
     api = {m.name: make_api_client(m, cache, budget) for m in api_models}
 

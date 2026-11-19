@@ -41,8 +41,8 @@ from .metrics import (SCOPES, asr_at_k_diff, attempt_cases, attempts_markdown, c
                       summarize, summarize_attempts, to_markdown)
 from .models import Budget, BudgetExceeded, ModelConfig, ModelResponse, ResponseCache
 from .runner import (API_KINDS, RANDOMNESS_SOURCES, EpisodeSpec, RunConfig, attempt_attacks,
-                     build_matrix, check_attempts, load_config, make_api_client, run_episode,
-                     scripted_client)
+                     build_matrix, check_attempts, check_prices, load_config, make_api_client,
+                     run_episode, scripted_client)
 from .tasks import TaskInstance
 from .variants import variant_count, variant_template
 from .world import World, build_world
@@ -607,10 +607,7 @@ async def run_adaptive(cfg: RunConfig, acfg: AdaptiveConfig, run_dir: str | Path
     for m in cfg.models:
         if m.kind not in API_KINDS + ("scripted",):
             raise ValueError(f"model {m.name!r}: unknown kind {m.kind!r}")
-    for m in api_models:
-        if cfg.budget_usd is not None and not (m.price_in_per_m or m.price_out_per_m):
-            raise ValueError(f"model {m.name!r}: set price_in_per_m / price_out_per_m from the "
-                             f"provider's price list, otherwise the budget cap cannot work")
+    check_prices(api_models, cfg.budget_usd)
     cache = ResponseCache(cfg.cache_path) if api_models else None
     if target_factory is None:
         api = {m.name: make_api_client(m, cache, budget) for m in cfg.models if m.kind in API_KINDS}

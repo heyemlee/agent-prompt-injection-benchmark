@@ -130,3 +130,31 @@ def test_max_retries_is_configurable(tmp_path, monkeypatch):
     for name in ("e1_pilot.toml", "e1_qwen_siliconflow.toml"):
         qwen = [m for m in load_config(CONFIGS / name).models if "siliconflow" in (m.base_url or "")]
         assert qwen and all(m.max_retries and m.max_retries >= 10 for m in qwen), name
+
+
+def test_local_model_needs_no_key_or_price_and_reads_its_address(tmp_path, monkeypatch):
+    """A model served on your own machine: no API key, no price, address from the environment
+    (so a machine's network name stays out of committed configs), and a long timeout."""
+    from injbench.runner import check_prices
+
+    monkeypatch.delenv("NO_SUCH_KEY", raising=False)
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.setenv("QWEN_URL", "http://qwen-box.local:8000/v1")
+    local = ModelConfig(name="q", model="m", api_key_env="NO_SUCH_KEY", local=True,
+                        base_url_env="QWEN_URL", timeout_s=1200)
+    c = OpenAICompatClient(local, ResponseCache(tmp_path / "c.sqlite"), Budget(1.0))
+    assert c.client.api_key == "local"
+    assert str(c.client.base_url).rstrip("/") == "http://qwen-box.local:8000/v1"
+    assert c.client.timeout == 1200
+    check_prices([local], budget_usd=5.0)  # free, so the budget cap does not need its price
+
+    paid = ModelConfig(name="p", model="m", api_key_env="NO_SUCH_KEY")
+    with pytest.raises(RuntimeError, match="NO_SUCH_KEY"):
+        OpenAICompatClient(paid, ResponseCache(tmp_path / "c.sqlite"), Budget(1.0))
+    with pytest.raises(ValueError, match="price"):
+        check_prices([paid], budget_usd=5.0)
+    check_prices([paid], budget_usd=None)  # no cap, nothing to count
+
+    monkeypatch.delenv("QWEN_URL")
+    with pytest.raises(RuntimeError, match="QWEN_URL"):
+        OpenAICompatClient(local, ResponseCache(tmp_path / "c.sqlite"), Budget(1.0))

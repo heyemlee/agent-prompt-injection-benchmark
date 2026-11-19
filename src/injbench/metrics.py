@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter, defaultdict
-from typing import Callable
+from typing import Callable, Iterable
 
 Record = dict
 Filter = Callable[[Record], bool]
@@ -267,6 +267,19 @@ def attempts_markdown(section: dict | None, arm_column: bool = False) -> list[st
     return lines
 
 
+def comparison_baselines(defense: str, arms: Iterable[str]) -> list[str]:
+    """The arms a defense is paired with: `none`, and for a stacked arm `A+B` also `A`, the arm
+    it adds to. `permissions+spotlight_datamark` is then measured against `permissions` as well,
+    which isolates what spotlighting adds on top of permissions."""
+    available = set(arms)
+    out = ["none"] if defense != "none" and "none" in available else []
+    if "+" in defense:
+        base = defense.rsplit("+", 1)[0]
+        if base in available and base not in out:
+            out.append(base)
+    return out
+
+
 def summarize(records: list[Record], n_boot: int = 1000, seed: int = 0) -> dict:
     ok = [r for r in records if r.get("status") == "ok"]
     arms: dict[tuple[str, str], list[Record]] = defaultdict(list)
@@ -290,18 +303,15 @@ def summarize(records: list[Record], n_boot: int = 1000, seed: int = 0) -> dict:
     models = sorted({m for m, _ in arms})
     for model in models:
         defs = sorted(d for m, d in arms if m == model)
-        if "none" not in defs:
-            continue
         for d in defs:
-            if d == "none":
-                continue
-            for name in HEADLINE:
-                filt, val = METRICS[name]
-                res = paired_diff(arms[(model, "none")], arms[(model, d)], filt, val,
-                                  n_boot=n_boot, seed=seed)
-                if res is not None:
-                    paired.append({"model": model, "baseline": "none", "defense": d,
-                                   "metric": name, **res})
+            for base in comparison_baselines(d, defs):
+                for name in HEADLINE:
+                    filt, val = METRICS[name]
+                    res = paired_diff(arms[(model, base)], arms[(model, d)], filt, val,
+                                      n_boot=n_boot, seed=seed)
+                    if res is not None:
+                        paired.append({"model": model, "baseline": base, "defense": d,
+                                       "metric": name, **res})
     n_templates = len({r["template"] for r in ok})
     notes = []
     if n_templates < 10:
@@ -339,12 +349,12 @@ def to_markdown(summary: dict) -> str:
         cells = [arm["model"], arm["defense"], *(_fmt(arm["metrics"][k]) for k in secondary)]
         lines.append("| " + " | ".join(cells) + " |")
     if summary["paired"]:
-        lines += ["", "## Paired differences (defense minus none)", "",
-                  "| Model | Defense | Metric | Difference |", "|---|---|---|---|"]
+        lines += ["", "## Paired differences (defense minus baseline)", "",
+                  "| Model | Defense | Baseline | Metric | Difference |", "|---|---|---|---|---|"]
         for p in summary["paired"]:
             ci = f" [{p['ci'][0]:+.2f}, {p['ci'][1]:+.2f}]" if p["ci"] else ""
-            lines.append(f"| {p['model']} | {p['defense']} | {LABELS[p['metric']]} | "
-                         f"{p['diff']:+.2f}{ci} |")
+            lines.append(f"| {p['model']} | {p['defense']} | {p.get('baseline', 'none')} | "
+                         f"{LABELS[p['metric']]} | {p['diff']:+.2f}{ci} |")
     if any(arm.get("usage", {}).get("cost_usd") or arm.get("usage", {}).get("input_tokens")
            for arm in summary["arms"]):
         lines += ["", "## Usage", "",

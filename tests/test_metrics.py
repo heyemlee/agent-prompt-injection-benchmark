@@ -1,4 +1,5 @@
-from injbench.metrics import METRICS, cluster_bootstrap, paired_diff, rate, summarize, to_markdown
+from injbench.metrics import (METRICS, cluster_bootstrap, comparison_baselines, paired_diff, rate,
+                              summarize, to_markdown)
 
 
 def rec(template, condition="benign", success=True, defense="none", **kw):
@@ -43,3 +44,25 @@ def test_summary_and_markdown():
     assert s["notes"]
     md = to_markdown(s)
     assert "Safe completion under attack" in md
+
+
+def test_stacked_arms_are_paired_with_the_arm_they_add_to():
+    arms = ["none", "permissions", "spotlight_datamark", "permissions+spotlight_datamark"]
+    assert comparison_baselines("none", arms) == []
+    assert comparison_baselines("permissions", arms) == ["none"]
+    assert comparison_baselines("spotlight_datamark", arms) == ["none"]
+    assert comparison_baselines("permissions+spotlight_datamark", arms) == ["none", "permissions"]
+    # Without a `none` arm, a stacked arm is still compared with its base.
+    assert comparison_baselines("permissions+modernbert",
+                                ["permissions", "permissions+modernbert"]) == ["permissions"]
+
+    records = [rec(f"t{i}", condition="attack", success=(d != "none"), defense=d)
+               for i in range(3) for d in ("none", "permissions", "permissions+x")]
+    s = summarize(records, n_boot=50)
+    pairs = {(p["baseline"], p["defense"]) for p in s["paired"]}
+    assert pairs == {("none", "permissions"), ("none", "permissions+x"),
+                     ("permissions", "permissions+x")}
+    safe = {(p["baseline"], p["defense"]): p["diff"] for p in s["paired"]
+            if p["metric"] == "safe_completion_under_attack"}
+    assert safe[("none", "permissions+x")] == 1.0 and safe[("permissions", "permissions+x")] == 0.0
+    assert "| m | permissions+x | permissions |" in to_markdown(s)

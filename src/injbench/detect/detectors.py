@@ -169,7 +169,8 @@ class HFDetector:
                                  truncation=True, max_length=self.max_tokens,
                                  return_tensors="pt").to(self.device)
             with torch.inference_mode():
-                logits = self.model(**enc).logits.double().cpu()
+                # float64 on the CPU: MPS has no float64, and log-odds need the precision
+                logits = self.model(**enc).logits.float().cpu().double()
             pos = torch.logsumexp(logits[:, self.pos_idx], dim=1)
             neg = torch.logsumexp(logits[:, self.neg_idx], dim=1)
             out += (pos - neg).tolist()

@@ -75,7 +75,7 @@ def hardware_info(device: str | None = None) -> dict[str, Any]:
 def _sized_text(detector, n_tokens: int) -> str:
     tok = detector.tokenizer
     ids = tok(_FILLER * (n_tokens // 40 + 2), add_special_tokens=False)["input_ids"]
-    text = tok.decode(ids[:max(1, n_tokens - 2)])
+    text = tok.decode(ids[:max(1, n_tokens - 2)], clean_up_tokenization_spaces=False)
     while detector.count_tokens(text) > n_tokens and len(text) > 1:
         text = text[:-5]
     return text

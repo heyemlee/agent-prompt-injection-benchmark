@@ -24,7 +24,7 @@ to AgentDojo and newer benchmarks, and what it does not cover, is under
 | M1: core harness (world, policy, tools, 4 task templates, 4 attack families, 5 goals, `none`/`permissions` arms, runner, metrics) | done; smoke runs on Claude 5.5 ×3 and Qwen3.5-9B (below) |
 | M2: 21 task templates, 13 goals, spotlighting arms, exposure-after-defense metrics | code done ([templates](docs/templates.md), [spotlighting](docs/spotlighting.md)); E1 on real models not run yet |
 | M3: injection detectors (ModernBERT vs Prompt Guard 2) on top of permissions | code done, ModernBERT trained offline ([detector card](docs/detector.md)); Prompt Guard 2 waits for gated access; E2 not run yet |
-| M4: adaptive vs repeated attacks at equal k (ASR@k) | code done ([attacks](docs/attacks.md)); paid comparison not run yet |
+| M4: adaptive vs repeated attacks at equal k (ASR@k) | code done ([attacks](docs/attacks.md)); the paid comparison has not run yet. It is required before any claim about a defense, because static attacks alone overstate robustness ([below](#related-work-and-positioning)) |
 | M5: gated DPO-vs-SFT robustness training (Tinker API) | waits for E2 |
 | M6: Inspect port, write-up, model card | Inspect port done ([Inspect](docs/inspect.md)); write-up and model card after the results |
 

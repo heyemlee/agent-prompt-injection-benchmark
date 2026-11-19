@@ -263,6 +263,32 @@ within-permission attacks is still clearly above zero. Otherwise its marginal va
   and XSTest over-refusal (supplementary; the denominator is its 250 safe prompts).
 - **Reference.** Compare with Meta SecAlign's published results.
 
+### 8.4 ASR@k — repeated vs adaptive attacks (M4, required)
+E1 and E2 use fixed payload templates, and static suites overstate robustness:
+- Nasr et al. (2025, [arXiv 2510.09023](https://arxiv.org/abs/2510.09023)) broke 12 published
+  defenses, spotlighting among them, with adaptive attacks, most at above 90% success. Most of
+  them had reported near-zero rates. With spotlighting on, their search attack reached 99% on
+  three of four target models and 47% on the fourth, against 0–28% for the static template.
+- AttriGuard (USENIX Security 2026, [arXiv 2603.10749](https://arxiv.org/abs/2603.10749)) reports
+  the same for agent defenses. On Gemini 2.5, three baselines at 0–5% static ASR reach 30–82%
+  under a 200-query adaptive attack.
+
+Two rules follow.
+- **The comparison is part of the core results.** No claim about a defense arm rests on E1 or E2
+  alone. On a model that already resists the static templates (every Claude 5.5 run so far),
+  static ASR cannot separate the arms at all. Paid runs go in this order: E1, this comparison,
+  then E2.
+- **A claim is limited to the attack that ran.** The attacker is one LLM conversation with K = 5
+  feedback rounds per case. Published search attacks spend 200 to 800 queries per case, and
+  Nasr et al. needed a median of 13 to 58 queries for the first success on undefended models.
+  Results are therefore worded "at least one success within k attempts under a K-round adaptive
+  attacker". No arm is called robust or secure.
+
+`configs/adaptive_qwen.toml` (Qwen3.5-9B target, Claude Sonnet 5.5 attacker, cap $8) covers the
+four M1 templates with `none` and `permissions`. Before the run, add the spotlighting arm with
+the largest static drop in E1, and after E2 the better detector arm: those are the arms whose
+static numbers need this check. Details and limitations: [docs/attacks.md](docs/attacks.md).
+
 ## 9. Milestones
 
 | | Scope | Acceptance criteria | Est. time | Est. API cost |
@@ -342,7 +368,7 @@ runs/, artifacts/, logs/ outputs, detector data and checkpoints, Inspect logs (a
 | Too few templates give wide CIs | template-clustered bootstrap reported honestly; M2 scales to 20+ |
 | Leak heuristics have false positives or negatives | canaries are distinctive; aggregate detection needs name and number on the same line; audit samples by hand |
 | Model or provider changes (e.g., the Tinker lineup) | the model is a config value; record model IDs and dates in every run |
-| Defenses look better than they are | adaptive attacks (M4), held-out families, exposure tracking |
+| Defenses look better than they are | adaptive attacks (M4, required: §8.4), held-out families, exposure tracking; claims limited to the attack that ran |
 | Cost overrun | cache, budget cap, smoke configs |
 
 ## 14. Responsible use
@@ -365,5 +391,8 @@ production models. All data is synthetic, and no employer code, data or benchmar
   analysis ([docs/detector.md](docs/detector.md)). Decide before the paid E2 run.
 - **Attacker model for the adaptive run.** A Claude attacker may refuse some rounds, which would
   understate adaptive attacks. Check `attacker_stats.errors` in the run manifest.
+- **Adaptive budget.** K = 5 is small next to published budgets (§8.4). Decide before the paid
+  run whether to raise K, for example to 20, on a subset of cases. The attacker's cost grows at
+  least linearly with K.
 - **Prompt Guard 2 access.** Gated on Hugging Face (Meta approves manually); needs `HF_TOKEN` in
   `.env`.

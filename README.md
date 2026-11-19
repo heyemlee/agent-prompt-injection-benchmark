@@ -26,7 +26,7 @@ to AgentDojo and newer benchmarks, and what it does not cover, is under
 | M3: injection detectors (ModernBERT vs Prompt Guard 2) on top of permissions | code done, ModernBERT trained offline ([detector card](docs/detector.md)); Prompt Guard 2 waits for gated access; E2 not run yet |
 | M4: adaptive vs repeated attacks at equal k (ASR@k) | code done ([attacks](docs/attacks.md)); the paid comparison has not run yet. It is required before any claim about a defense, because static attacks alone overstate robustness ([below](#related-work-and-positioning)) |
 | M5: gated DPO-vs-SFT robustness training (Tinker API) | waits for E2 |
-| M6: Inspect port, write-up, model card | Inspect port done ([Inspect](docs/inspect.md)); write-up and model card after the results |
+| M6: Inspect port, write-up, model card | Inspect port done ([Inspect](docs/inspect.md)); write-up and model card after the results. inspect_evals no longer takes code for new evals, so there is no pull request to make, and a Register listing would need a paper |
 
 About 600 offline tests cover all of it. Every test uses scripted agents or fakes, so none of
 them calls a paid API.

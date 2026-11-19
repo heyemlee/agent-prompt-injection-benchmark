@@ -299,7 +299,7 @@ static numbers need this check. Details and limitations: [docs/attacks.md](docs/
 | **M3** | detector dataset builder, ModernBERT fine-tune, Prompt Guard 2 baseline, threshold calibration, latency, E2 results and error analysis | E2 table, detector card | 2–3 wks | ≤$50 |
 | **M4** | adaptive attacker loop vs repeated attempts at equal k | ASR@k table | 1 wk | $10–50 |
 | **M5** | gate decision; if go, E3 on Tinker | E3 table, per-seed results | 3–4 wks | $100–300 |
-| **M6** | Inspect port and inspect_evals PR, write-up, HF model card, README results | public release | 1–2 wks | — |
+| **M6** | Inspect port, write-up, HF model card, README results; an Inspect Evals Register entry only if the write-up goes on arXiv | public release | 1–2 wks | — |
 
 Costs are estimates from public price lists, not measurements.
 

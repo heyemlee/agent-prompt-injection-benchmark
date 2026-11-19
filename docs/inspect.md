@@ -1,9 +1,10 @@
 # injbench on Inspect (M6)
 
 injbench also runs on the UK AISI [Inspect](https://inspect.aisi.org.uk/) framework (`inspect_ai`),
-with the **same episodes, tools, defenses and deterministic graders** as the native runner. The goal
-is a later proposal to [inspect_evals](https://github.com/UKGovernmentBEIS/inspect_evals); nothing
-has been submitted.
+with the **same episodes, tools, defenses and deterministic graders** as the native runner.
+[inspect_evals](https://github.com/UKGovernmentBEIS/inspect_evals) no longer takes code for new
+evals, so a listing there would be a Register entry that points at this repository (see the last
+section). Nothing has been submitted.
 
 - **Code:** `src/injbench/inspect_port/`.
   - `episodes.py`: the Inspect-free core.
@@ -294,12 +295,33 @@ The tests are designed to fail when the port falls behind the native runner:
 - **Scenario hook.** The scripted mock model learns which sample it is answering through a
   test-only wrapper around `solver.start_episode`.
 
-## Toward inspect_evals (open questions)
+## Listing in inspect_evals: the Register
 
-- **Packaging.** inspect_evals keeps each eval's code in its own repository, while this port
-  imports the `injbench` package. Either depend on a published `injbench` wheel, or vendor the
-  standard-library modules (`world`, `policy`, `env`, `tasks`, `attacks`, `defenses`, `graders`,
-  `agent`, `runner.build_matrix`) into `inspect_evals/injbench`. To decide.
+Checked 2026-11-19 against inspect_evals' `CONTRIBUTING.md` and `register/README.md`.
+inspect_evals **no longer accepts code submissions for new evals**. An eval stays in its author's
+repository, and the Inspect Evals Register (beta) lists it at a pinned commit. So there is no
+pull request to prepare, and the port stays in this package.
+
+What a Register entry needs, and where this repository stands:
+
+| Requirement | Here |
+|---|---|
+| a public GitHub repository, pinned by a full commit SHA | not public yet |
+| a `pyproject.toml` with a `[project]` table | yes |
+| `inspect_ai` declared as a dependency | only as the optional `inspect` extra; check whether that passes, or move it |
+| tasks defined with `@task` | yes (`inspect_port/task.py`) |
+| external assets pinned | none needed: the world is generated from seeds |
+| a submission issue with the arXiv URL of the paper the eval implements | no paper yet; this is the blocker |
+| logs of two models running every sample, uploaded once the bot has opened the pull request | needs paid runs |
+
+The Register does not apply inspect_evals' old acceptance criteria as a gate. The form still asks
+for a paper, and whether an entry without one is accepted is not stated. An entry is therefore
+realistic only once a write-up is on arXiv, and it is not a release criterion (PLAN §9).
+
+### Open questions for the port
+
+- **Packaging.** Settled by the Register: the eval stays in this repository, so nothing is
+  vendored and the port keeps importing the `injbench` package.
 - **Sandbox.** Not needed: the tools are in-process SQLite, so the eval has no Docker dependency.
 - **Default matrix.** The default task runs everything with one instance per template. After M2
   (20+ templates) that is several hundred samples per arm; an inspect_evals default may need to be
@@ -310,6 +332,7 @@ The tests are designed to fail when the port falls behind the native runner:
 - **Older Inspect versions.** 0.3.153 and 0.3.195 could not be installed in this sandbox (their
   wheels contain a `.vscode` folder it refuses to write), so the lower bound is the oldest
   version that was actually tested.
-- **Before submitting.** inspect_evals needs an eval README with results on reference models,
-  which means paid runs. Logs contain the attack payloads, and PLAN §14 rules out publishing
+- **Before registering.** The Register asks for logs of two models running every sample, which
+  means paid runs. Check what the logs hold before uploading them: they contain the attack
+  payloads, and PLAN §14 rules out publishing
   attack strings tuned against named production models.

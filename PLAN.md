@@ -34,6 +34,9 @@ use with pay-per-token APIs only.
 - Publishing ready-to-use attack strings against named production models.
 - Claiming state of the art. The point is careful measurement on one realistic workflow.
 
+Related work, what this project emphasizes next to it, and what it does not cover are in the
+README ([Related work and positioning](README.md#related-work-and-positioning)).
+
 ## 3. Threat model
 
 | | |
@@ -52,7 +55,8 @@ Attacker goals fall into two classes. The split matters because permissions can 
   falsify the team's own report, close or misroute the team's own tickets.
 
 Out of scope: poisoning model weights, a malicious principal, multi-turn social engineering of the
-principal.
+principal, and poisoned tool descriptions or other tool metadata. The tool definitions are trusted
+here; MCPTox ([arXiv 2508.14925](https://arxiv.org/abs/2508.14925)) benchmarks that surface.
 
 ## 4. Environment: "Acme IT-ops"
 

@@ -13,7 +13,9 @@ does that cost, and how much does each layer of defense actually buy?
   happened **and** the attacker's goal failed **and** there were no unrequested side effects.
   Refusing everything scores zero.
 
-The design, threat model and experiment plan are in [PLAN.md](PLAN.md).
+The design, threat model and experiment plan are in [PLAN.md](PLAN.md). How the project relates
+to AgentDojo and newer benchmarks, and what it does not cover, is under
+[Related work and positioning](#related-work-and-positioning).
 
 ## Status
 
@@ -213,6 +215,55 @@ What it showed:
   call inside the reasoning block, where SiliconFlow does not parse it, so the turn ends as an
   empty reply (2 of 3 replays). Qwen therefore runs with thinking off (4 of 4 tool calls came
   back correctly); Claude keeps adaptive thinking.
+
+## Related work and positioning
+
+This project extends an existing line of work. It does not open a new one. The descriptions
+below follow each paper's abstract (checked 2026-11-19).
+
+| Work | What it is | Relation to this project |
+|---|---|---|
+| [AgentDojo](https://arxiv.org/abs/2406.13352) (NeurIPS 2024) | The reference benchmark for this problem: 97 tasks and 629 security test cases for agents that call tools over untrusted data. | The same setup: payloads arrive in tool results, and utility and security are measured together. This project trades breadth for one workflow with an explicit authorization model. |
+| [AgentDyn](https://arxiv.org/abs/2602.03117) (2026) | 60 open-ended tasks and 560 injection cases. It faults earlier benchmarks for static tasks, simple user tasks and the lack of helpful third-party instructions, and finds that almost all of ten defenses are insecure or over-defend. | Helpful third-party instructions are built in here: a requester's note must be followed when the task delegates it, and the same text is a hard negative for the detectors ([PLAN §5](PLAN.md)). The tasks here come from templates and are not open-ended. |
+| [NetInjectBench](https://arxiv.org/abs/2607.10490) (2026) | Network operations, with injections in tickets, alerts, logs and runbooks: 130 scenarios on three small open models. A policy gate that checks trusted metadata allows 0 of 240 unsafe actions, while spotlighting still allows 18%. | The closest in domain and in its main finding, that authorization at execution time comes first. That finding is not new here. |
+| [INFUSE](https://arxiv.org/abs/2610.20776) (2026) | 40 long-horizon tasks (shell commands, code changes, dependency installs), 56 attack scenarios and 19 models. | A different surface, coding and shell agents. Not covered here. |
+| [MetaPI](https://arxiv.org/abs/2611.10026) (2026) | A toolkit that turns utility benchmarks into injection benchmarks with optimized adaptive payloads. | Its attacks are stronger than the ones run here (see the limits below). |
+
+**What this project emphasizes**
+- **Within-permission integrity attacks, reported on their own.** Falsifying the team's own
+  report or closing the team's own tickets are things the principal may do, so a permission
+  check cannot stop them. Nine of the 13 goals are of this kind.
+- **Attempted and realized violations as separate metrics.** With permissions on, a hijacked
+  agent is contained but still tries, and the attempted-violation rate shows it.
+- **Detectors on top of permissions, judged end to end.** Thresholds are frozen at a validation
+  FPR, and the result that counts is safe completion, not an offline score. Offline scores do
+  not transfer: on 47,611 held-out examples Prompt Guard 2 (86M) reached an AUROC of 0.757
+  ([From Detection to Decision](https://arxiv.org/abs/2610.20907), 2026).
+- **A headline metric that refusing cannot game** (safe completion, defined at the top).
+- **Repeated and adaptive attacks at equal k**, so a gain is called adaptive only when feedback
+  earns it.
+
+**Limits**
+- **Attack strength.** The attacks are fixed templates with paraphrase variants, plus an LLM
+  attacker with K = 5 rounds of feedback. Published adaptive attacks are far stronger.
+  [The Attacker Moves Second](https://arxiv.org/abs/2510.09023) (2025) broke 12 defenses,
+  spotlighting among them, most at above 90% success, although most had reported near-zero
+  rates. [AttriGuard](https://arxiv.org/abs/2603.10749) (USENIX Security 2026) gives its
+  attacker 200 queries per case. So static results here cannot rank defenses on their own, and
+  results are worded "within k attempts under a K-round adaptive attacker", never "robust"
+  ([PLAN §8.4](PLAN.md)).
+- **Defenses not covered.** No design-level isolation such as
+  [CaMeL](https://arxiv.org/abs/2503.18813), and no trained defense such as SecAlign unless the
+  gated M5 runs.
+- **Attack surface.** Payloads arrive in tool results only. Poisoned tool descriptions and other
+  tool metadata are out of scope; [MCPTox](https://arxiv.org/abs/2508.14925) benchmarks that
+  surface.
+- **One synthetic environment**, with template-generated tasks.
+
+**OWASP mapping (ours, not OWASP's).** In the
+[OWASP Top 10 for Agentic Applications](https://genai.owasp.org/) (2026), every attack here is
+ASI01, Agent Goal Hijack. The goals then exercise ASI02, Tool Misuse and Exploitation, and the
+privilege-escalation and cross-team goals also ASI03, Identity and Privilege Abuse.
 
 ## Layout
 

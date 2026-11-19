@@ -74,11 +74,12 @@ def injbench_agent(max_steps: int = 15) -> Solver:
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         scenario = scenario_for(state.sample_id, state.metadata)
-        episode = start_episode(scenario)  # payload injected, state snapshotted
+        # Payload injected, state snapshotted; epoch k is the native attempt k-1.
+        episode = start_episode(scenario, attempt=state.epoch - 1)
         _EPISODES[state.uuid] = episode
         state.messages = [
             ChatMessageSystem(content=system_prompt(scenario.world, scenario.task,
-                                                    scenario.defense)),
+                                                    episode.defense)),
             ChatMessageUser(content=scenario.task.prompt),
         ]
         tools = tool_infos()

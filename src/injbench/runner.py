@@ -189,7 +189,13 @@ def episode_seed(spec: EpisodeSpec) -> str:
     defense actually changes something, and a re-run reproduces every request (cache hits). A new
     attempt gets a new marker, so an adaptive attacker cannot reuse one seen in earlier feedback.
     """
-    return f"{spec.task.instance_id}|a{spec.attempt}"
+    return defense_seed(spec.task.instance_id, spec.attempt)
+
+
+def defense_seed(instance_id: str, attempt: int) -> str:
+    """`episode_seed` without an `EpisodeSpec`, for runners that build episodes themselves
+    (the Inspect port)."""
+    return f"{instance_id}|a{attempt}"
 
 
 async def run_episode(spec: EpisodeSpec, world: World, client, max_steps: int) -> tuple[dict, dict]:

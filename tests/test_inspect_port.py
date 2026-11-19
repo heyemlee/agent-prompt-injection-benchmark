@@ -192,10 +192,10 @@ def _record_scenarios(mp):
 
     real, starts = solver_module.start_episode, Counter()
 
-    def recording(scenario):
+    def recording(scenario, *args, **kwargs):
         starts[scenario.sample_id] += 1
         _CURRENT.set((scenario, starts[scenario.sample_id]))
-        return real(scenario)
+        return real(scenario, *args, **kwargs)
 
     mp.setattr(solver_module, "start_episode", recording)
 

@@ -54,7 +54,8 @@ def injbench_scorer() -> Scorer:
         episode, graded_from = take_episode(state), "live"
         if episode is None:  # e.g. re-scoring a log: rebuild the final state by replay
             scenario = scenario_for(state.sample_id, state.metadata)
-            episode = replay_episode(scenario, logged_tool_calls(state.messages))
+            episode = replay_episode(scenario, logged_tool_calls(state.messages),
+                                     attempt=state.epoch - 1)
             graded_from = "replay"
         final_reply, steps, hit_step_limit, refused, stop_reason = conversation_summary(
             state.messages, state.output)

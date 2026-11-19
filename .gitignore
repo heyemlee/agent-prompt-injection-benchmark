@@ -7,3 +7,4 @@ runs/
 *.sqlite
 .env
 .claude/.cc-writes/
+artifacts/

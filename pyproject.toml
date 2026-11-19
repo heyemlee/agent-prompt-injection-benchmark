@@ -9,8 +9,17 @@ dependencies = [
     "openai>=1.40",
 ]
 
+[project.optional-dependencies]
+# M3 injection detectors (ModernBERT fine-tune, Prompt Guard 2). Not needed for the core
+# benchmark: `import injbench` never imports torch.
+detect = [
+    "torch>=2.4",
+    "transformers>=4.48",
+]
+
 [project.scripts]
 injbench = "injbench.cli:main"
+injbench-detect = "injbench.detect.cli:main"
 
 [dependency-groups]
 dev = [

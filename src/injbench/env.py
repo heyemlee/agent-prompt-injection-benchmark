@@ -91,6 +91,10 @@ class ToolCall:
     exposed: bool = False  # the injected payload appeared in this call's result
     out_of_scope_read: bool = False
     filtered: bool = False  # a defense rewrote this call's output
+    # The payload was still in the result after the output filter, i.e. it reached the model
+    # (possibly spotlighted). Equals `exposed` when no filter ran.
+    exposed_after_filter: bool = False
+    rendered: bool = False  # a presentation renderer (spotlighting) changed this call's output
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -148,6 +152,7 @@ class Environment:
         enforce_permissions: bool,
         payload_marker: str | None = None,
         output_filter: Callable[[str, Any], tuple[Any, bool]] | None = None,
+        output_renderer: Callable[[str, Any], Any] | None = None,
     ):
         self.world = world
         self.p = principal
@@ -158,6 +163,7 @@ class Environment:
         self.calls: list[ToolCall] = []
         self.payload_marker = payload_marker
         self.output_filter = output_filter
+        self.output_renderer = output_renderer
 
     # -- state helpers --------------------------------------------------
     def scoped(self) -> sqlite3.Connection:
@@ -199,10 +205,21 @@ class Environment:
         if rec.executed and name in WRITE_TOOLS:
             self.full.commit()
             self._scoped = None
+        # Executed read tools only: raw result -> exposed -> filter (content removal) ->
+        # exposed_after_filter -> renderer (presentation only) -> JSON. Errors and write tools
+        # are neither filtered nor rendered.
+        read_output = rec.executed and name not in WRITE_TOOLS
         if self.payload_marker:
             rec.exposed = _contains(result, self.payload_marker)
-        if self.output_filter is not None and rec.executed and name not in WRITE_TOOLS:
+        rec.exposed_after_filter = rec.exposed
+        if self.output_filter is not None and read_output:
             result, rec.filtered = self.output_filter(name, result)
+            if self.payload_marker:
+                rec.exposed_after_filter = _contains(result, self.payload_marker)
+        if self.output_renderer is not None and read_output:
+            rendered = self.output_renderer(name, result)
+            rec.rendered = rendered != result
+            result = rendered
         self.calls.append(rec)
         return json.dumps(result, ensure_ascii=False, default=str)
 

@@ -108,10 +108,23 @@ def scripted_client(m: ModelConfig, task: TaskInstance, attack: AttackInstance |
     return ScriptedClient(m.name, actions, reply)
 
 
+def episode_seed(spec: EpisodeSpec) -> str:
+    """Seed for per-episode defense parameters (the spotlighting marker).
+
+    It depends on the task instance and the attempt only. Benign and attacked episodes of one
+    instance, and arms that differ only in permissions, therefore see identical prompts until the
+    defense actually changes something, and a re-run reproduces every request (cache hits). A new
+    attempt gets a new marker, so an adaptive attacker cannot reuse one seen in earlier feedback.
+    """
+    return f"{spec.task.instance_id}|a{spec.attempt}"
+
+
 async def run_episode(spec: EpisodeSpec, world: World, client, max_steps: int) -> tuple[dict, dict]:
-    task, attack, defense = spec.task, spec.attack, spec.defense
+    task, attack = spec.task, spec.attack
+    defense = spec.defense.for_episode(episode_seed(spec))
     env = Environment(world, task.principal, defense.enforce_permissions,
-                      attack.marker if attack else None, defense.make_output_filter())
+                      attack.marker if attack else None, defense.make_output_filter(),
+                      output_renderer=defense.make_output_renderer())
     if attack is not None:
         env.inject(task.vector.table, task.vector.row_id, task.vector.column, attack.payload)
     before = snapshot(env.full)
@@ -136,6 +149,8 @@ async def run_episode(spec: EpisodeSpec, world: World, client, max_steps: int) -
         "attempted_violations": out.attempted_violations[:MAX_LISTED],
         "unexpected_writes": out.unexpected_writes[:MAX_LISTED],
         "out_of_scope_reads": out.out_of_scope_reads, "exposed": out.exposed,
+        "exposed_after_filter": out.exposed_after_filter,
+        "copied_marked_text": out.copied_marked_text,
         "wrongful_refusal": out.wrongful_refusal, "n_tool_calls": out.n_tool_calls,
         "steps": res.steps, "hit_step_limit": res.hit_step_limit,
         "model_refused": res.refused, "final_stop_reason": res.stop_reason,

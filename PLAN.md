@@ -343,11 +343,12 @@ production models. All data is synthetic, and no employer code, data or benchmar
   time.
 - Whether the PostgreSQL row-level-security backend is worth adding.
 - The license to use for the public release.
-- **E2 threshold policy.** The fine-tuned ModernBERT ranks almost perfectly. But its validation scores
-  are so confident that the 1%-FPR quantile lands at extreme log-odds, and the false-positive rate
-  that threshold produces does not transfer to unseen templates. Keep the pure quantile, or add the
-  optional floor (`calibrate --min-threshold 0`)? Decide before the paid E2 run, from the
-  21-template retrain in [docs/detector.md](docs/detector.md).
+- **E2 threshold policy.** Retrained on 21 templates, the pre-registered 1%-FPR rule transfers
+  (test FPR 0.5–0.9%) and catches 94–100% of the unseen `business_note` family. It also redacts a
+  name or a title in 14% of benign benchmark episodes. A floor at log-odds 0
+  (`calibrate --min-threshold 0`) removes that, but lets 58% of `business_note` payloads reach
+  the model. Recommendation: keep the pre-registered rule and report the floor as a sensitivity
+  analysis ([docs/detector.md](docs/detector.md)). Decide before the paid E2 run.
 - **Attacker model for the adaptive run.** A Claude attacker may refuse some rounds, which would
   understate adaptive attacks. Check `attacker_stats.errors` in the run manifest.
 - **Prompt Guard 2 access.** Gated on Hugging Face (Meta approves manually); needs `HF_TOKEN` in

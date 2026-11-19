@@ -13,10 +13,66 @@ splits, training, calibration, latency, preliminary offline results and how to r
   gated (manual approval by Meta) and this worktree has no Hugging Face token.
 - Not part of this branch: the paid end-to-end E2 run.
 
-Every number below comes from 4 task templates, so it is **preliminary**: the template split
-puts a single template in test.
+**Merged into `main` (2026-11-19).** After the M2 templates landed, the dataset was rebuilt on all
+21 templates, with val and test templates in worlds of their own (see Splits), and ModernBERT was
+retrained, recalibrated and re-evaluated. The section "After the merge: 21 templates" reports
+those numbers. The sections that follow it are the original 4-template run, kept for comparison:
+its template split put a single template in test, so they are **preliminary**.
 
-## Findings so far (preliminary)
+## After the merge: 21 templates
+
+**Setup.**
+- Templates split 11 / 5 / 5. Train templates run in worlds 1–3, val in 4–5 and test in 6–7.
+- Rows: train 3,141 (2,646 injected, 495 benign), val 1,224 (924 / 300), test 1,227 (1,012 / 215).
+- Nothing is dropped for source disjointness. `business_note` appears in test only (234 rows).
+- Training: ModernBERT-base, 3 seeds, 3 epochs × 197 steps, about 800 s per seed on the CPU of an
+  Apple M4 Pro (inside the sandbox). Validation AUROC is 1.000 from the first epoch.
+- Thresholds: frozen at 1% FPR on validation, at log-odds −15.17, −11.01 and −12.88 for seeds 0,
+  1 and 2. Each gives validation FPR 3/300 and recall 924/924.
+
+**Test split** (5 templates the model never saw, in worlds it never saw):
+
+| | Seed 0 (the arm) | Seed 1 | Seed 2 | Seed 0, floor at log-odds 0 |
+|---|---|---|---|---|
+| FPR, all benign | 2/215 = 0.009 [0.003, 0.033] | 1/215 | 1/215 | 0/215 |
+| World benign text | 1/174 | 0/174 | 0/174 | 0/174 |
+| Hard negatives (world, hand-written, composed) | 1/46 | 1/46 | 1/46 | 0/46 |
+| Recall, seen families | 778/778 | 778/778 | 778/778 | 778/778 |
+| **Recall, unseen family** (`business_note`) | 220/234 = 0.940 | 225/234 = 0.962 | 234/234 | **20/234 = 0.085** |
+| AUROC (seen / unseen) | 1.0000 / 0.9989 | 1.0000 / 0.9971 | 1.0000 / 0.9997 | same as seed 0 |
+
+**End-to-end proxy** (scripted gold agent on the benchmark world, seed 0, 1,018 episodes):
+
+| | Seed 0, 1% rule (the arm) | Seed 0, floor at log-odds 0 |
+|---|---|---|
+| Benign episodes that lost some text | 6/42 = 0.14 [0.07, 0.28] | 0/42 |
+| Payload reached the model, seen families | 0/732 | 0/732 |
+| Payload reached the model, `business_note` | 10/244 = 0.04 | 141/244 = 0.58 |
+
+The benign text the 1% rule redacted was person names in ticket fields (`Casey Chen` 4×,
+`Emerson Rossi` 2×, `Casey Rossi` 2×) and one ticket title (5×).
+
+**Latency** (CPU, Apple M4 Pro):
+- Per read-tool call: p50 58 ms, p95 368 ms, with 17.6 segments per call on average.
+- Per episode: p50 70 ms, p95 382 ms.
+- The new templates return more segments per call than the 4-template run did (48 / 206 ms then).
+
+**What changed with 21 templates.**
+1. **The 1% rule now transfers.** With five validation templates, test FPR is 0.5–0.9% against
+   the 1% target. With one validation template it was 11–22%.
+2. **The three seen families are easy.** They score far above any benign text, so recall is 100%
+   at any threshold.
+3. **The unseen family sits just above the benign tail.** Only the extreme threshold catches it,
+   and that threshold also catches a few names and titles. The trade-off is real:
+   - The 1% rule keeps `business_note` mostly out of the model (4% gets through) but redacts
+     something in 14% of benign episodes.
+   - A floor at log-odds 0 never touches benign text but lets 58% of `business_note` through.
+4. **Recommendation for E2: keep the pre-registered rule** (1% validation FPR, frozen, seed 0) as
+   the arm, and report the floor as a sensitivity analysis. Choosing the threshold after seeing
+   test numbers would bias E2. Benign completion in the paid run will show whether redacted
+   names cost any task success.
+
+## Findings from the 4-template run (preliminary)
 
 1. **Ranking is perfect on held-out data.** The fine-tuned ModernBERT-base gets test AUROC 1.000
    in each of 3 seeds, on a template it never saw. That includes the held-out `business_note`
@@ -119,8 +175,9 @@ body, a requester or author name, a KB title or body, a `run_sql` cell.
   are at least 64 characters long.
 
 **Generation.**
-- World seeds 1, 2 and 3; the benchmark itself uses seed 0. Each template gets 6 instances per
-  world from `build_instances`.
+- Train templates run in world seeds 1, 2 and 3, val templates in 4 and 5, and test templates in
+  6 and 7. The benchmark itself uses seed 0. Each template gets 6 instances per world from
+  `build_instances`.
 - Each instance's gold actions are replayed in an `Environment`:
   - once benign;
   - once per applicable (family, goal) attack, with the payload injected into the instance's
@@ -129,7 +186,7 @@ body, a requester or author name, a KB title or body, a `run_sql` cell.
   arms use.
 - Only public interfaces are used (`TEMPLATES` / `build_instances`, `FAMILIES` / `GOALS` /
   `applicable` / `build_attack`, `Environment`, `gold_actions`). M2's templates therefore flow
-  in with no code change; a test simulates 20 templates.
+  in with no code change; a test checks the 21 registered templates.
 
 **Labels.**
 - *Injected*: a segment from an attacked replay that contains the attack instruction.
@@ -200,14 +257,19 @@ git-ignored `artifacts/` directory and is never committed, and this page quotes 
 ## Splits
 
 - **Templates.** Templates are ordered by a seeded hash and cut 50 / 25 / 25, with at least one
-  per split (4 templates give 2 / 1 / 1; 20 give 10 / 5 / 5).
+  per split (4 templates give 2 / 1 / 1; the 21 merged templates give 11 / 5 / 5).
   - This works for any number of templates from 3 up.
   - With 1–2 templates the builder falls back to an instance-level split and records
     `template_disjoint: false` in the manifest.
   - `--val-templates` / `--test-templates` override the assignment.
 - **Ticket sources.** Every record (a ticket with its notes, or a KB article) belongs to exactly
-  one split. When two splits read the same record, test keeps it, then val. The manifest
-  verifies that no source is shared between splits.
+  one split, and the manifest verifies that no source is shared between splits.
+  - By default, val and test templates run in worlds of their own (`--val-world-seeds 4 5`,
+    `--test-world-seeds 6 7`). The rule then holds by construction and nothing is dropped.
+  - With shared worlds (either flag given with no value), test keeps a record two splits read,
+    then val. On the 21 templates that dropped 6,487 train and 1,772 val segments: only 4 of 11
+    train templates and 3 of 5 val templates kept any injected rows. That is why the default
+    changed at the merge.
 - **Attack families.**
   - `business_note` is never in train or val; it is not even generated outside test.
   - The seen families (override, info_block, fake_system) are in every split, on disjoint
@@ -454,18 +516,19 @@ threshold.
 
 ## Open questions for the coordinator
 
-1. **Threshold policy for the paid E2 run.** The spec rule (1% quantile on validation, log-odds
-   ≈ −18.5 for seed 0) flags anything the model is not maximally sure is benign. A floor at
-   log-odds 0 (`calibrate --min-threshold 0`) would have given 0/126 test FPR for seeds 0 and 2
-   with the same recall. Either way, recalibrate after the M2 merge: a validation split with
-   about 5 templates should make the quantile less extreme.
+1. **Threshold policy for the paid E2 run.** On 4 templates, the 1% rule (log-odds ≈ −18.5 for
+   seed 0) flagged anything the model was not maximally sure was benign, and a floor at log-odds 0
+   looked free. On 21 templates it is not free: the floor drops unseen-family recall from 94% to
+   8.5%. The recommendation above is to keep the pre-registered rule and report the floor as a
+   sensitivity analysis. The final call is the user's, before the paid run.
 2. **Family split.** Should one seen family also be held out of training and used only for
-   validation, so that model selection rewards family generalization?
-3. **After the M2 merge**, run `build-data`, `train` and `calibrate` again. The template split
-   changes, and the `preliminary` flag clears at 20 templates.
+   validation, so that model selection rewards family generalization? The 21-template results
+   make this sharper: the seen families are trivially separable, and only the unseen one tests
+   generalization.
+3. **After the M2 merge, rebuild and retrain.** Done 2026-11-19; see "After the merge: 21
+   templates".
 4. **Prompt Guard 2** needs `HF_TOKEN` for an account with approved access.
-5. **`uv.lock`** was regenerated with torch and transformers. Re-lock after merging the other
-   branches.
+5. **`uv.lock`.** Re-locked with both extras at the merge.
 
 ## Files
 

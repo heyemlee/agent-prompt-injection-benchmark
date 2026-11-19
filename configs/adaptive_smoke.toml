@@ -1,0 +1,38 @@
+# Offline repeated-vs-adaptive comparison (M4). No API calls, no cost: the targets are scripted
+# reference agents and the attacker is a scripted stand-in that ignores feedback, so the two
+# arms come out equal. It checks the plumbing; configs/adaptive_qwen.toml is the real experiment.
+#   uv run injbench adaptive configs/adaptive_smoke.toml --dry-run
+#   uv run injbench adaptive configs/adaptive_smoke.toml
+#   uv run injbench run configs/adaptive_smoke.toml --dry-run   # the repeated arm as a plain run
+[run]
+name = "adaptive-smoke"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+defenses = ["none", "permissions"]
+attempts = 3
+attempt_randomness = "paraphrase"
+variant_seed = 0
+concurrency = 8
+
+[adaptive]
+observation = "actions"   # outcome | actions | transcript
+arms = ["repeated", "adaptive"]
+stop_on_success = true
+
+[attacker]
+name = "scripted-attacker"
+kind = "scripted"
+behavior = "cycle_families"
+
+[[models]]
+name = "ref-gold"
+kind = "scripted"
+behavior = "gold"
+
+[[models]]
+name = "ref-gullible"
+kind = "scripted"
+behavior = "gullible"

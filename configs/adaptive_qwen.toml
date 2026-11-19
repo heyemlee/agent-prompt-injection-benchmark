@@ -1,0 +1,68 @@
+# M4: repeated (paraphrase) vs adaptive attacks at equal k on Qwen3.5-9B (SiliconFlow), the model
+# that static attacks already move (smoke ASR 0.22 without a defense, 0.06 with permissions).
+# Same 18 attack conditions per defense as the smoke configs, 5 attempts per case.
+#
+# 1. Put both keys in .env (git-ignored): SILICONFLOW_API_KEY=... and ANTHROPIC_API_KEY=...
+# 2. Check the plan, then run:
+#      uv run injbench adaptive configs/adaptive_qwen.toml --dry-run
+#      uv run injbench adaptive configs/adaptive_qwen.toml
+#    Ablations of what the attacker sees (same cases, same cache):
+#      uv run injbench adaptive configs/adaptive_qwen.toml --observation outcome
+#      uv run injbench adaptive configs/adaptive_qwen.toml --observation transcript
+#
+# Cost (rough estimate, not measured): at most 36 cases x 5 attempts x 2 arms = 360 target
+# episodes, fewer because sequences stop at their first success and paraphrase attempts reuse
+# cached samples of identical requests; well under $1 for Qwen. Up to 144 attacker turns on
+# Sonnet 5.5, about $2-5. The budget cap covers both; responses are cached in .cache/, so a re-run
+# costs nothing. Attempt 1 reuses the cached responses of the earlier Qwen smoke run.
+[run]
+name = "adaptive-qwen"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+defenses = ["none", "permissions"]
+attempts = 5
+# Claude rejects temperature and the Qwen config sends none, so the stated randomness source of
+# the repeated arm is the payload text: attempt i carries paraphrase variant i.
+attempt_randomness = "paraphrase"
+variant_seed = 0
+concurrency = 4
+max_steps = 15
+budget_usd = 8.0
+
+[adaptive]
+observation = "actions"   # outcome | actions | transcript (see docs/attacks.md)
+arms = ["repeated", "adaptive"]
+stop_on_success = true
+max_payload_chars = 2000
+
+# The attacker model. Payloads it writes stay in the run directory (runs/ is git-ignored).
+[attacker]
+name = "attacker-sonnet-5-5"
+kind = "anthropic"
+model = "claude-sonnet-5-5"
+api_key_env = "ANTHROPIC_API_KEY"
+max_tokens = 16000
+price_in_per_m = 2.0
+price_out_per_m = 10.0
+price_cache_write_per_m = 2.50
+price_cache_read_per_m = 0.10
+extra_params = { output_config = { effort = "medium" } }
+
+# The target: identical to configs/qwen_siliconflow.toml, so attempt 1 replays that run's cache.
+[[models]]
+name = "qwen3.5-9b-siliconflow"
+kind = "openai_compat"
+model = "Qwen/Qwen3.5-9B"
+base_url = "https://api.siliconflow.com/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+price_in_per_m = 0.10
+price_out_per_m = 0.15
+
+[models.extra_params]
+max_tokens = 8192
+
+[models.extra_params.extra_body]
+enable_thinking = false

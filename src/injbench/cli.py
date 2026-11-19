@@ -117,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
     rep = sub.add_parser("report", help="recompute the summary of a finished run")
     rep.add_argument("run_dir")
     rep.set_defaults(fn=_cmd_report)
+    from .adaptive import register_cli as register_adaptive  # M4: repeated vs adaptive attacks
+
+    register_adaptive(sub)
     args = parser.parse_args(argv)
     load_dotenv()
     return args.fn(args)

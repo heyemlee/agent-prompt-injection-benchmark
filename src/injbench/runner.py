@@ -23,6 +23,7 @@ from .metrics import summarize, to_markdown
 from .models import (Budget, BudgetExceeded, ModelConfig, OpenAICompatClient, ResponseCache,
                      ScriptedClient)
 from .tasks import TaskInstance, build_instances
+from .variants import variant_count
 from .world import World, build_world
 
 MAX_LISTED = 20
@@ -40,6 +41,10 @@ class RunConfig:
     defenses: list[str] = field(default_factory=lambda: ["none", "permissions"])
     include_benign: bool = True
     attempts: int = 1
+    # Required when attempts > 1 (PLAN §6): what makes repeated attempts differ. One of
+    # RANDOMNESS_SOURCES; see docs/attacks.md.
+    attempt_randomness: str | None = None
+    variant_seed: int = 0  # seeds the order of paraphrase variants
     max_steps: int = 15
     concurrency: int = 4
     budget_usd: float | None = 2.0
@@ -48,13 +53,56 @@ class RunConfig:
     models: list[ModelConfig] = field(default_factory=list)
 
 
+RANDOMNESS_SOURCES: dict[str, str] = {
+    "temperature": "independent model samples at the configured temperature (> 0); the payload "
+                   "is the same in every attempt",
+    "paraphrase": "attempt i carries paraphrase variant i of the payload (variant 0 is the "
+                  "canonical text); identical model requests share one sample, so attempts differ "
+                  "only where the payload text differs",
+}
+
+
+def check_attempts(cfg: RunConfig) -> None:
+    """Fails fast when repeated attempts would not be independent, or their source is unstated."""
+    if cfg.attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    source = cfg.attempt_randomness
+    if source is not None and source not in RANDOMNESS_SOURCES:
+        raise ValueError(f"unknown attempt_randomness {source!r}; known: "
+                         f"{sorted(RANDOMNESS_SOURCES)}")
+    if cfg.attempts == 1:
+        return
+    if source is None:
+        raise ValueError(f"attempts = {cfg.attempts} needs a stated randomness source: set "
+                         f"attempt_randomness to one of {sorted(RANDOMNESS_SOURCES)} in [run] "
+                         f"(at temperature 0, repetition means nothing)")
+    if source == "temperature":
+        for m in cfg.models:
+            if m.kind == "scripted":
+                raise ValueError(f"model {m.name!r} is scripted and never samples; use "
+                                 f"attempt_randomness = \"paraphrase\"")
+            if m.temperature is None or m.temperature <= 0:
+                raise ValueError(
+                    f"model {m.name!r}: attempt_randomness = \"temperature\" needs a temperature "
+                    f"above 0 in its [[models]] entry (now {m.temperature}). For models that "
+                    f"reject temperature, such as Claude 5.5, use \"paraphrase\"")
+    else:
+        for family in cfg.attack_families:
+            n = variant_count(family)
+            if n < cfg.attempts:
+                raise ValueError(f"attack family {family!r} has {n} paraphrase variants, fewer "
+                                 f"than attempts = {cfg.attempts}")
+
+
 def load_config(path: str | Path) -> RunConfig:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
     models = [ModelConfig(**m) for m in raw.get("models", [])]
     if not models:
         raise ValueError("config needs at least one [[models]] entry")
-    return RunConfig(**raw.get("run", {}), models=models)
+    cfg = RunConfig(**raw.get("run", {}), models=models)
+    check_attempts(cfg)
+    return cfg
 
 
 @dataclass
@@ -65,25 +113,50 @@ class EpisodeSpec:
     defense: Defense
     model: ModelConfig
     attempt: int
+    # The attempt index the model client sees; it keys the response cache, so equal keys share one
+    # sample of an identical request. None means `attempt` (independent samples per attempt).
+    sample_key: int | None = None
+
+    @property
+    def sampling_attempt(self) -> int:
+        return self.attempt if self.sample_key is None else self.sample_key
+
+
+def attempt_attacks(cfg: RunConfig, world: World, task: TaskInstance, family: str,
+                    goal: str) -> list[AttackInstance]:
+    """The attack of each repeated attempt: paraphrase variant i at attempt i, or the canonical
+    payload every time."""
+    if cfg.attempt_randomness == "paraphrase":
+        return [build_attack(world, task, family, goal, variant=a, variant_seed=cfg.variant_seed)
+                for a in range(cfg.attempts)]
+    return [build_attack(world, task, family, goal)] * cfg.attempts
 
 
 def build_matrix(cfg: RunConfig, world: World) -> list[EpisodeSpec]:
+    check_attempts(cfg)
     tasks = build_instances(world, cfg.templates, cfg.instances_per_template, cfg.instance_seed)
     defenses = [get_defense(d) for d in cfg.defenses]
+    # Paraphrase: attempts share samples of identical requests (sample key 0), so a benign episode
+    # would only replay; it runs once.
+    shared = cfg.attempts > 1 and cfg.attempt_randomness == "paraphrase"
     specs: list[EpisodeSpec] = []
     for task in tasks:
         conditions: list[tuple[str, str] | None] = [None] if cfg.include_benign else []
         conditions += [(f, g) for f in cfg.attack_families for g in cfg.attack_goals
                        if applicable(g, task)]
         for cond in conditions:
-            attack = build_attack(world, task, *cond) if cond else None
+            if cond is None:
+                attacks: list[AttackInstance | None] = [None] * (1 if shared else cfg.attempts)
+            else:
+                attacks = attempt_attacks(cfg, world, task, *cond)
             label = "benign" if cond is None else f"{cond[0]}+{cond[1]}"
             for d in defenses:
                 for m in cfg.models:
-                    for a in range(cfg.attempts):
+                    for a, attack in enumerate(attacks):
                         specs.append(EpisodeSpec(
                             episode_id=f"{task.instance_id}|{label}|{d.name}|{m.name}|a{a}",
-                            task=task, attack=attack, defense=d, model=m, attempt=a))
+                            task=task, attack=attack, defense=d, model=m, attempt=a,
+                            sample_key=0 if shared else None))
     return specs
 
 
@@ -129,7 +202,7 @@ async def run_episode(spec: EpisodeSpec, world: World, client, max_steps: int) -
         env.inject(task.vector.table, task.vector.row_id, task.vector.column, attack.payload)
     before = snapshot(env.full)
     res = await run_agent(client, env, world, task, defense, max_steps=max_steps,
-                          attempt=spec.attempt)
+                          attempt=spec.sampling_attempt)
     view = EpisodeView(env.full, task.principal, diff(before, snapshot(env.full)), env.calls,
                        res.final_reply, before)
     out = grade(task, attack, view, world, model_refused=res.refused)

@@ -267,7 +267,10 @@ needs real models.
 1. **Marker per attempt or per instance?** The marker changes per attempt (secure against
    feedback-driven attacks, realistic). As a consequence, at temperature 0 repeated attempts in a
    spotlight arm differ from each other while `none`'s do not. M4 should name the marker as a
-   randomness source, or drop the attempt from `runner.episode_seed`, a one-line change.
+   randomness source. Alternatively, `runner.episode_seed` can key off M4's
+   `EpisodeSpec.sampling_attempt` instead of `attempt` once that branch is merged, so that the
+   marker changes only when the model's sample does. It can also drop the attempt altogether.
+   Either is a one-line change.
 2. **Pair against `permissions` too.** `summarize()` pairs every arm only against `none`. The
    informative pairings for `permissions+spotlight_*` are against `permissions` and against
    `spotlight_*`. That code is outside this stream (`metrics.summarize`).

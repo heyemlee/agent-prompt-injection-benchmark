@@ -38,7 +38,8 @@ ARGS_ERROR = json.dumps({"error": "tool arguments must be a JSON object"})
 """Tool result for arguments that are not a JSON object, as in `agent.run_agent`."""
 
 
-def resolve_names(value: str | Iterable[str] | None, known: Iterable[str], what: str) -> tuple[str, ...]:
+def resolve_names(value: str | Iterable[str] | None, known: Iterable[str],
+                  what: str) -> tuple[str, ...]:
     """Normalize a task argument that names templates, attack families, goals or defenses.
 
     None selects every known name, in registry order. A string may hold several comma-separated

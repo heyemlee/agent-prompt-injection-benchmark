@@ -52,9 +52,10 @@ def injbench_scorer() -> Scorer:
 
     async def score(state: TaskState, target: Target) -> Score:
         episode, graded_from = take_episode(state), "live"
-        if episode is None:
+        if episode is None:  # e.g. re-scoring a log: rebuild the final state by replay
             scenario = scenario_for(state.sample_id, state.metadata)
-            episode, graded_from = replay_episode(scenario, logged_tool_calls(state.messages)), "replay"
+            episode = replay_episode(scenario, logged_tool_calls(state.messages))
+            graded_from = "replay"
         final_reply, steps, hit_step_limit, refused, stop_reason = conversation_summary(
             state.messages, state.output)
         out = grade_episode(episode, final_reply, model_refused=refused)

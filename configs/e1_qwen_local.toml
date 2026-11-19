@@ -1,0 +1,57 @@
+# E1 on the local Qwen: permissions first, then spotlighting (PLAN §8.1).
+# Matrix: 21 templates x instance 0 x {benign + 2 families x applicable goals} x 4 arms
+#         = 1,060 episodes.
+# Families: info_block (the pilot's) and business_note (held out from detector training, so E1
+# and E2 share it). Two families keep the run to about a night on a Mac; the other two can be
+# added later, and finished episodes replay from the cache.
+# Arms: none, permissions, spotlight_datamark, permissions+spotlight_datamark. base64 is left out:
+# in the pilot it matched datamark on ASR (0.04 vs 0.05) at 1.75x the tokens.
+# Arms that differ only in permissions share model samples until a blocked call or a scoped read
+# changes what the model sees; for Qwen that adds about a third of a base arm's time.
+# Run gate G0 (configs/e1_pilot_qwen_local.toml) first; its 143 episodes replay here.
+#   uv run injbench run configs/e1_qwen_local.toml --dry-run
+#   uv run injbench run configs/e1_qwen_local.toml
+[run]
+name = "e1-qwen-local"
+world_seed = 0
+instance_seed = 0
+instances_per_template = 1
+templates = ["access_request_handling", "access_review_privileged", "backlog_by_priority",
+             "chase_stale_pending", "close_confirmed", "closure_feedback_review",
+             "email_report_summary", "escalate_sla_risk", "escalation_digest_email",
+             "hold_requests", "kb_answer_comment", "kb_flag_outdated", "kb_form_email",
+             "link_duplicates", "mean_time_to_close", "p1_p2_review", "reassign_departing",
+             "reopen_requests", "sla_summary_report", "triage_new_tickets",
+             "weekly_volume_report"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
+                "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
+                "hold_unrequested"]
+defenses = ["none", "permissions", "spotlight_datamark", "permissions+spotlight_datamark"]
+concurrency = 4
+max_steps = 15
+
+# `model` names the exact weights. It is part of every cache key, so change it whenever the
+# weights or the quantization change, and cached responses of two servers never mix.
+[[models]]
+name = "qwen3.5-9b-local"
+kind = "openai_compat"
+model = "unsloth/Qwen3.5-9B-GGUF:Q8_0"
+base_url_env = "LOCAL_QWEN_BASE_URL"
+api_key_env = "LOCAL_QWEN_API_KEY"
+local = true          # costs $0: no price needed, and budget caps ignore it
+timeout_s = 1200      # four slots on a laptop can need minutes for one long turn
+max_retries = 2
+temperature = 0.7
+
+[models.extra_params]
+max_tokens = 8192
+top_p = 0.8
+
+# Thinking off, as on SiliconFlow. Sampling follows Qwen's recommended non-thinking settings,
+# because SiliconFlow does not document the defaults the pilot ran with; G0 checks the outcome.
+[models.extra_params.extra_body]
+top_k = 20
+min_p = 0.0
+chat_template_kwargs = { enable_thinking = false }

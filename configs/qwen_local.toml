@@ -1,0 +1,65 @@
+# Qwen3.5-9B served on your own machine, for every Qwen run after the E1 pilot.
+#
+# Why: Qwen spending on SiliconFlow is capped at $2 in total, and its per-minute token quota made
+# the Qwen runs take days. A local server costs nothing per token; the price is time. SiliconFlow
+# stays the reference: the E1 pilot ran there, and gate G0 (configs/e1_pilot_qwen_local.toml)
+# checks that the local server reproduces it before anything larger runs.
+#
+# Setup on the serving Mac (Apple silicon). llama.cpp is the best-supported runtime for Qwen3.5;
+# Ollama does not load Qwen3.5 GGUFs reliably and truncates long prompts by default.
+#   brew install llama.cpp
+#   llama-server -hf unsloth/Qwen3.5-9B-GGUF:Q8_0 --jinja --no-mmproj \
+#     -c 131072 -np 4 --host 0.0.0.0 --port 8000
+# --jinja is required for tool calls. -np 4 serves four requests at once (keep `concurrency`
+# equal to it), and the four slots share -c (32K tokens each; a turn here needs well under 32K).
+# With 16 GB of memory, use :Q6_K with -c 65536 -np 2, set concurrency = 2, and change `model`
+# below to match. Allow incoming connections when macOS asks.
+#
+# Then, on the machine that runs injbench, put the server's address in .env (git-ignored), so the
+# serving Mac's name stays out of this public repository:
+#   LOCAL_QWEN_BASE_URL=http://<serving Mac's local hostname>.local:8000/v1
+# (System Settings > General > Sharing shows the local hostname.) Add LOCAL_QWEN_API_KEY to .env
+# only if llama-server was started with --api-key.
+#
+# This config is the smoke check: one template, instance 0, 7 episodes (G0 reuses them). Within
+# minutes it shows whether tool calls parse, thinking stays off, and how long an episode takes:
+#   uv run injbench run configs/qwen_local.toml
+# Read the transcripts before G0.
+[run]
+name = "qwen-local-smoke"
+world_seed = 0
+instance_seed = 0
+instances_per_template = 1
+templates = ["hold_requests"]
+attack_families = ["info_block"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
+                "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
+                "hold_unrequested"]
+defenses = ["none"]
+concurrency = 4
+max_steps = 15
+
+# `model` names the exact weights. It is part of every cache key, so change it whenever the
+# weights or the quantization change, and cached responses of two servers never mix.
+[[models]]
+name = "qwen3.5-9b-local"
+kind = "openai_compat"
+model = "unsloth/Qwen3.5-9B-GGUF:Q8_0"
+base_url_env = "LOCAL_QWEN_BASE_URL"
+api_key_env = "LOCAL_QWEN_API_KEY"
+local = true          # costs $0: no price needed, and budget caps ignore it
+timeout_s = 1200      # four slots on a laptop can need minutes for one long turn
+max_retries = 2
+temperature = 0.7
+
+[models.extra_params]
+max_tokens = 8192
+top_p = 0.8
+
+# Thinking off, as on SiliconFlow. Sampling follows Qwen's recommended non-thinking settings,
+# because SiliconFlow does not document the defaults the pilot ran with; G0 checks the outcome.
+[models.extra_params.extra_body]
+top_k = 20
+min_p = 0.0
+chat_template_kwargs = { enable_thinking = false }

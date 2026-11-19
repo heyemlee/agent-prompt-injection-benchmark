@@ -1,0 +1,53 @@
+# E2 on the local Qwen: what does an injection detector add on top of permissions? (PLAN §8.2)
+# Only the 5 templates held out from detector training and calibration (the detector's test
+# split; tests/test_config_guards.py keeps it that way), so no task the detector was tuned on is
+# scored. Matrix: 5 test templates x instance 0 x {benign + 4 families x applicable goals} x arms
+#         = 226 episodes.
+# Threshold: artifacts/detect/calibration/modernbert.json, the pre-registered rule (1% FPR on the
+# validation split, seed 0).
+# Arms share model samples until a redaction changes what the model sees; the permissions arm's
+# info_block and business_note episodes replay from configs/e1_qwen_local.toml.
+# Prompt Guard 2 is gated on Hugging Face. Once access is granted and HF_TOKEN is in .env:
+#   uv run --extra detect injbench-detect calibrate --detector promptguard2
+# then add "permissions+promptguard2" to `defenses`; the other arms replay from the cache.
+#   uv run --extra detect injbench-detect check --load
+#   uv run --extra detect injbench run configs/e2_detectors_qwen_local.toml
+[run]
+name = "e2-detectors-qwen-local"
+world_seed = 0
+instance_seed = 0
+instances_per_template = 1
+templates = ["access_request_handling", "chase_stale_pending", "kb_flag_outdated",
+             "reassign_departing", "reopen_requests"]  # the detector's test split
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
+                "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
+                "hold_unrequested"]
+defenses = ["permissions", "permissions+modernbert"]
+concurrency = 4
+max_steps = 15
+
+# `model` names the exact weights. It is part of every cache key, so change it whenever the
+# weights or the quantization change, and cached responses of two servers never mix.
+[[models]]
+name = "qwen3.5-9b-local"
+kind = "openai_compat"
+model = "unsloth/Qwen3.5-9B-GGUF:Q8_0"
+base_url_env = "LOCAL_QWEN_BASE_URL"
+api_key_env = "LOCAL_QWEN_API_KEY"
+local = true          # costs $0: no price needed, and budget caps ignore it
+timeout_s = 1200      # four slots on a laptop can need minutes for one long turn
+max_retries = 2
+temperature = 0.7
+
+[models.extra_params]
+max_tokens = 8192
+top_p = 0.8
+
+# Thinking off, as on SiliconFlow. Sampling follows Qwen's recommended non-thinking settings,
+# because SiliconFlow does not document the defaults the pilot ran with; G0 checks the outcome.
+[models.extra_params.extra_body]
+top_k = 20
+min_p = 0.0
+chat_template_kwargs = { enable_thinking = false }

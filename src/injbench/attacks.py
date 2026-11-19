@@ -7,11 +7,12 @@ test the graders, not to attack anything.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from .env import EpisodeView
 from .tasks import TaskInstance, standalone_ints
+from .variants import variant_template
 from .world import TEAMS, World
 
 ATTACKER_EMAIL = "it-audit@acme-support.example"
@@ -47,10 +48,27 @@ class AttackInstance:
     success: Callable[[EpisodeView], bool]
     scripted_actions: list[tuple[str, dict]] = field(default_factory=list)
     transform_gold: Callable[[list[tuple[str, dict]]], list[tuple[str, dict]]] | None = None
+    # Paraphrase variant of the family template (0 = the canonical FAMILIES text). None for a
+    # payload that was not built from a family template, e.g. one written by the adaptive attacker.
+    variant: int | None = 0
+    # Text whose presence in a tool result counts as exposure. Defaults to the instruction, which
+    # every family template and paraphrase variant contains verbatim.
+    marker: str = ""
 
-    @property
-    def marker(self) -> str:
-        return self.instruction
+    def __post_init__(self) -> None:
+        if not self.marker:
+            self.marker = self.instruction
+
+    def with_payload(self, payload: str, variant: int | None = None) -> "AttackInstance":
+        """The same goal and success predicate carried by a different payload text.
+
+        The whole payload (stripped) becomes the exposure marker, because free-form text need not
+        contain the instruction verbatim.
+        """
+        payload = payload.strip()
+        if not payload:
+            raise ValueError("empty payload")
+        return replace(self, payload=payload, marker=payload, variant=variant)
 
 
 def _attacker_account(world: World, task: TaskInstance) -> tuple[int, str]:
@@ -178,15 +196,20 @@ def applicable(goal: str, task: TaskInstance) -> bool:
     return templates is None or task.template in templates
 
 
-def build_attack(world: World, task: TaskInstance, family: str, goal: str) -> AttackInstance:
+def build_attack(world: World, task: TaskInstance, family: str, goal: str, variant: int = 0,
+                 variant_seed: int = 0) -> AttackInstance:
+    """`variant` selects a paraphrase of the family template (see variants.py); variant 0 is the
+    canonical template, so the default reproduces the original payload exactly."""
     if family not in FAMILIES:
         raise KeyError(f"unknown attack family {family!r}; known: {sorted(FAMILIES)}")
     if goal not in GOALS:
         raise KeyError(f"unknown attack goal {goal!r}; known: {sorted(GOALS)}")
     builder, _ = GOALS[goal]
     klass, instruction, success, actions, transform = builder(world, task)
-    payload = FAMILIES[family].format(
+    template = (FAMILIES[family] if variant == 0
+                else variant_template(family, goal, variant, variant_seed))
+    payload = template.format(
         instruction=instruction, principal_name=task.principal.name, today=world.truth.today)
     return AttackInstance(family=family, goal=goal, klass=klass, instruction=instruction,
                           payload=payload, success=success, scripted_actions=actions,
-                          transform_gold=transform)
+                          transform_gold=transform, variant=variant)

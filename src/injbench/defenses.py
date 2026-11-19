@@ -33,3 +33,11 @@ def get_defense(name: str) -> Defense:
     if name not in DEFENSES:
         raise KeyError(f"unknown defense {name!r}; known: {sorted(DEFENSES)}")
     return DEFENSES[name]
+
+
+# M3 detector arms (src/injbench/detect/arms.py): permissions plus a detector that redacts
+# flagged tool-output segments. They subclass Defense, so this import stays below it; model
+# weights load lazily when an arm builds its first filter, never at import.
+from .detect.arms import DETECTOR_ARMS  # noqa: E402
+
+DEFENSES.update(DETECTOR_ARMS)

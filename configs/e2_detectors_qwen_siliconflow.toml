@@ -1,6 +1,9 @@
 # E2: what does an injection detector add on top of permissions? (PLAN §8.2)
-# Qwen3.5-9B on SiliconFlow, same model settings as configs/qwen_siliconflow.toml. Paid: not run
-# in the M3 branch. Extend `templates` once the M2 templates are merged.
+# Qwen3.5-9B on SiliconFlow, same model settings as configs/qwen_siliconflow.toml. Not planned to
+# run: Qwen spending on SiliconFlow is capped at $2, so configs/e2_detectors_qwen_local.toml runs
+# this matrix on a local server. Both score only the 5 templates held out from detector training
+# and calibration (the detector's test split; tests/test_config_guards.py checks it). An earlier
+# version scored train and val templates, which would have overstated the detector.
 #
 # Before running (docs/detector.md has the details):
 # 1. uv sync --extra detect
@@ -21,9 +24,13 @@
 name = "e2-detectors-qwen-siliconflow"
 world_seed = 0
 instances_per_template = 1
-templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
-attack_families = ["info_block", "business_note"]
-attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+templates = ["access_request_handling", "chase_stale_pending", "kb_flag_outdated",
+             "reassign_departing", "reopen_requests"]  # the detector's test split
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
+                "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
+                "hold_unrequested"]
 defenses = ["permissions", "permissions+promptguard2", "permissions+modernbert"]
 concurrency = 4
 max_steps = 15

@@ -144,9 +144,10 @@ these commands exit with code 3 and a message that explains how to get it.
 
 `injbench-detect all` runs everything that can run here and skips the rest.
 
-**E2 itself** (paid, run by the coordinator):
-`uv run --extra detect injbench run configs/e2_detectors_qwen_siliconflow.toml`. The offline
-plumbing check is `configs/e2_detectors_scripted.toml`.
+**E2 itself** (run by the coordinator, on a local Qwen server; see `configs/qwen_local.toml`):
+`uv run --extra detect injbench run configs/e2_detectors_qwen_local.toml`. It scores only the
+detector's test templates; `tests/test_config_guards.py` fails any config whose detector arms
+reach a train or val template. The offline plumbing check is `configs/e2_detectors_scripted.toml`.
 
 **Settings.**
 
@@ -547,7 +548,8 @@ src/injbench/detect/
   arms.py            the two defense arms
   cli.py             injbench-detect
 configs/e2_detectors_scripted.toml          offline check of the arm inside `injbench run`
-configs/e2_detectors_qwen_siliconflow.toml  the paid E2 run (not run here)
+configs/e2_detectors_qwen_local.toml        the E2 run, on a local Qwen server
+configs/e2_detectors_qwen_siliconflow.toml  the same matrix on SiliconFlow (not planned: $2 cap)
 tests/test_detect_*.py                      offline; the torch-backed tests skip without the extra
 ```
 

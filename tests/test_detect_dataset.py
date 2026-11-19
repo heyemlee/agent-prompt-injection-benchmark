@@ -94,6 +94,22 @@ def test_hard_negatives_in_every_split(built):
     assert not augmented["train"] & augmented["test"] and not augmented["val"] & augmented["test"]
 
 
+def test_composed_negatives_stay_inside_their_split(built):
+    for split, rows in built.rows.items():
+        composed = [r for r in rows if r["origin"] == "composed"]
+        assert composed, split
+        bodies = {r["text"] for r in rows if r["origin"] in ("replay", "probe")
+                  and r["field_kind"] == "body"}
+        notes = {r["text"].strip() for r in rows if r["hard_negative"]
+                 and r["origin"] != "composed"}
+        for r in composed:
+            host, note = r["text"].rsplit("\n\n", 1)
+            assert r["label"] == 0 and r["hn_origin"] == "composed"
+            assert host in bodies and note in notes, (split, r["text"][:60])
+    docs = [r for r in built.rows["train"] if r["hn_kind"] == "documentation"]
+    assert docs and all("\n" in r["text"] for r in docs)
+
+
 def test_replay_captures_read_tools_only(world):
     task = build_instances(world, ["kb_answer_comment"], 1)[0]
     tools = [name for name, _ in replay(world, task)]

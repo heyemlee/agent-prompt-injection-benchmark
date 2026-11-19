@@ -10,8 +10,10 @@ the same output-filter hook the defense arms use and cut into segments by the sa
 Labels: a segment from an attacked replay that contains the attack instruction is *injected*;
 every segment of a benign replay is *benign*. Benign segments that are legitimate in-band
 instructions from `world.py` (escalation requests, resolution confirmations) are marked as hard
-negatives, and hand-written hard negatives (`hard_negatives.py`) are added with text-disjoint
-splits.
+negatives. Three kinds of benign text are added on top, each kept inside one split:
+- hand-written hard negatives and multi-line documentation (`hard_negatives.py`), split by text;
+- *composed* (format-matched) negatives: a benign body, a blank line and one of the split's
+  in-band instructions, the same shape as an injected segment but without a payload.
 
 Splits (train / val / test):
 - **Templates** are disjoint: each template's instances go to one split. With fewer than three
@@ -50,7 +52,7 @@ SPLITS = ("train", "val", "test")
 HELDOUT_FAMILIES = ("business_note",)
 DATA_FILES = tuple(f"{s}.jsonl" for s in SPLITS)
 _CLAIM_PRIORITY = {"test": 0, "val": 1, "train": 2}
-_ORIGIN_PRIORITY = {"replay": 0, "probe": 1, "augment": 2}
+_ORIGIN_PRIORITY = {"replay": 0, "probe": 1, "augment": 2, "composed": 3}
 _NAME_KEYS = frozenset({"requester", "author", "name"})
 
 
@@ -76,6 +78,8 @@ class DatasetConfig:
     fractions: tuple[float, float, float] = (0.5, 0.25, 0.25)
     probes: bool = True  # probe unread hard-negative tickets so every split has some
     augment: bool = True  # add the hand-written hard negatives
+    compose_negatives: bool = True  # benign "host + blank line + in-band note" segments
+    composed_per_host: int = 2
 
     def resolved(self) -> "DatasetConfig":
         return DatasetConfig(**{
@@ -379,10 +383,43 @@ def build_dataset(cfg: DatasetConfig | None = None,
                     tool="", field="", field_kind="body", source=f"augment:{kind}:{i}",
                     hn_kind=kind))
 
+    if cfg.compose_negatives:
+        occs += _compose_negatives(occs, cfg)
+
     rows = _dedup(occs, cfg.heldout_families)
     manifest = _manifest(cfg, rows, tsplit, template_disjoint, dropped, heldout_dropped,
                          skipped, unexposed, read_calls, probe_count)
     return BuildResult(rows=rows, manifest=manifest, calls=_dedup_calls(calls))
+
+
+def _compose_negatives(occs: list[Occurrence], cfg: DatasetConfig) -> list[Occurrence]:
+    """Format-matched negatives. An injected segment is a host text, a blank line and a payload;
+    without benign segments of the same shape, a detector can learn "appended paragraph means
+    injection". For each benign body in a split, this appends `composed_per_host` of that same
+    split's single-line in-band instructions (hard negatives), so nothing crosses splits."""
+    out: list[Occurrence] = []
+    for split in SPLITS:
+        hosts: dict[str, Occurrence] = {}
+        kinds: dict[str, str] = {}
+        for o in occs:
+            if o.split != split or o.label != 0:
+                continue
+            if o.origin in ("replay", "probe") and o.field_kind == "body":
+                hosts.setdefault(o.text, o)
+            if o.hn_kind and "\n" not in o.text.strip():
+                kinds.setdefault(o.text.strip(), o.hn_kind)
+        if not kinds:
+            continue
+        for text in sorted(hosts):
+            host = hosts[text]
+            picks = sorted(kinds, key=lambda a: _h(cfg.split_seed, "compose", text, a))
+            for note in picks[:cfg.composed_per_host]:
+                out.append(Occurrence(
+                    text=f"{text}\n\n{note}", label=0, split=split, origin="composed",
+                    template=host.template, instance_id=host.instance_id,
+                    world_seed=host.world_seed, tool=host.tool, field=host.field,
+                    field_kind="body", source=host.source, hn_kind=kinds[note]))
+    return out
 
 
 def _probe_hard_negatives(world: World, seed: int, cfg: DatasetConfig, owner: dict[str, str],
@@ -441,7 +478,8 @@ def _dedup(occs: list[Occurrence], heldout: tuple[str, ...]) -> dict[str, list[d
             "payload_span": list(a.payload_span) if a and a.payload_span else None,
             "hard_negative": bool(hn_kinds),
             "hn_kind": hn_kinds[0] if hn_kinds else None,
-            "hn_origin": ("augment" if first.origin == "augment" else "world") if hn_kinds else None,
+            "hn_origin": ({"augment": "augment", "composed": "composed"}.get(first.origin, "world")
+                          if hn_kinds else None),
             "templates": sorted({o.template for o in group}),
             "instance_ids": sorted({o.instance_id for o in group}),
             "world_seeds": sorted({o.world_seed for o in group if o.world_seed is not None}),

@@ -54,6 +54,8 @@ def metrics(rows: list[dict], scores: Sequence[float], threshold: float) -> dict
         "fpr_hard_negatives": fpr(lambda r: r["hard_negative"]),
         "fpr_world_hard_negatives": fpr(lambda r: r["hn_origin"] == "world"),
         "fpr_augmented_hard_negatives": fpr(lambda r: r["hn_origin"] == "augment"),
+        "fpr_composed_negatives": fpr(lambda r: r["hn_origin"] == "composed"),
+        "fpr_world_benign": fpr(lambda r: r["origin"] in ("replay", "probe")),
         "fpr_not_hard_negative": fpr(lambda r: not r["hard_negative"]),
         "fpr_text_unseen_in_train": fpr(lambda r: not r["seen_in_train"]),
         "fpr_by_hn_kind": grouped([x for x in ben if x[0]["hard_negative"]],
@@ -123,6 +125,10 @@ def evaluate(cal: Calibration, score: Scorer, *, root: str | Path | None = None,
         "dataset_fingerprint": fingerprint,
         "dataset_matches_calibration": fingerprint == cal.dataset_fingerprint,
         "val": cal.val, split: metrics(rows, scores, cal.threshold),
+        # Diagnostic only, never used by an arm: the same scores at log-odds 0 (p = 0.5). When
+        # this differs a lot from the frozen threshold's numbers, the gap is calibration (where
+        # a tail quantile of validation scores landed), not ranking.
+        f"{split}_diagnostic_at_logodds_0": metrics(rows, scores, 0.0),
     }
     _write_scores(reports_dir(root) / f"{cal.tag}_{split}_scores.jsonl", rows, scores)
     path = reports_dir(root) / f"{cal.tag}_{split}.json"

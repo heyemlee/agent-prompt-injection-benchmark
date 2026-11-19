@@ -36,14 +36,10 @@ def dataset(world):
                          worlds={0: world})
 
 
-@pytest.fixture(scope="module")
-def tiny_model(tmp_path_factory, dataset):
-    """A 2-layer ModernBERT with a word-level tokenizer trained on the dataset's text."""
+def _word_tokenizer(texts, input_names=("input_ids", "attention_mask")):
     from tokenizers import Tokenizer, models, pre_tokenizers, processors, trainers
-    from transformers import (ModernBertConfig, ModernBertForSequenceClassification,
-                              PreTrainedTokenizerFast)
+    from transformers import PreTrainedTokenizerFast
 
-    texts = [r["text"] for rows in dataset.rows.values() for r in rows]
     tok = Tokenizer(models.WordLevel(unk_token="[UNK]"))
     tok.pre_tokenizer = pre_tokenizers.Whitespace()
     tok.train_from_iterator(texts, trainers.WordLevelTrainer(
@@ -51,20 +47,55 @@ def tiny_model(tmp_path_factory, dataset):
     cls_id, sep_id = tok.token_to_id("[CLS]"), tok.token_to_id("[SEP]")
     tok.post_processor = processors.TemplateProcessing(
         single="[CLS] $A [SEP]", special_tokens=[("[CLS]", cls_id), ("[SEP]", sep_id)])
-    fast = PreTrainedTokenizerFast(
+    return PreTrainedTokenizerFast(
         tokenizer_object=tok, pad_token="[PAD]", unk_token="[UNK]", cls_token="[CLS]",
-        sep_token="[SEP]", mask_token="[MASK]", model_input_names=["input_ids", "attention_mask"])
+        sep_token="[SEP]", mask_token="[MASK]", model_input_names=list(input_names))
+
+
+@pytest.fixture(scope="module")
+def tiny_model(tmp_path_factory, dataset):
+    """A 2-layer ModernBERT with a word-level tokenizer trained on the dataset's text."""
+    from transformers import ModernBertConfig, ModernBertForSequenceClassification
+
+    fast = _word_tokenizer([r["text"] for rows in dataset.rows.values() for r in rows])
     torch.manual_seed(0)
     cfg = ModernBertConfig(
         vocab_size=fast.vocab_size, hidden_size=32, intermediate_size=64, num_hidden_layers=2,
         num_attention_heads=2, max_position_embeddings=1024, pad_token_id=fast.pad_token_id,
-        bos_token_id=cls_id, eos_token_id=sep_id, cls_token_id=cls_id, sep_token_id=sep_id,
+        bos_token_id=fast.cls_token_id, eos_token_id=fast.sep_token_id,
+        cls_token_id=fast.cls_token_id, sep_token_id=fast.sep_token_id,
         num_labels=2, id2label={0: "BENIGN", 1: "INJECTION"},
         label2id={"BENIGN": 0, "INJECTION": 1})
     out = tmp_path_factory.mktemp("tiny-modernbert")
     ModernBertForSequenceClassification(cfg).save_pretrained(out)
     fast.save_pretrained(out)
     return out
+
+
+def test_promptguard2_code_path_with_a_tiny_deberta_stand_in(tmp_path, dataset):
+    """Prompt Guard 2 is a DebertaV2ForSequenceClassification with BENIGN / MALICIOUS labels
+    and a fast tokenizer. A tiny random model of the same class goes through the same loader."""
+    from transformers import DebertaV2Config, DebertaV2ForSequenceClassification
+
+    fast = _word_tokenizer([r["text"] for r in dataset.rows["val"]],
+                           ("input_ids", "token_type_ids", "attention_mask"))
+    torch.manual_seed(0)
+    cfg = DebertaV2Config(
+        vocab_size=fast.vocab_size, hidden_size=32, intermediate_size=64, num_hidden_layers=2,
+        num_attention_heads=2, max_position_embeddings=512, relative_attention=True,
+        position_buckets=256, pos_att_type=["p2c", "c2p"], position_biased_input=False,
+        pad_token_id=fast.pad_token_id, num_labels=2,
+        id2label={0: "BENIGN", 1: "MALICIOUS"}, label2id={"BENIGN": 0, "MALICIOUS": 1})
+    DebertaV2ForSequenceClassification(cfg).save_pretrained(tmp_path)
+    fast.save_pretrained(tmp_path)
+    det = HFDetector("promptguard2", str(tmp_path), "cpu")
+    assert det.pos_idx == [1] and det.neg_idx == [0]
+    texts = [r["text"] for r in dataset.rows["val"][:5]]
+    scores = det.score_segments(texts)
+    logits = det.model(**det.tokenizer(texts, padding=True, return_tensors="pt")).logits
+    expected = (logits[:, 1] - logits[:, 0]).tolist()  # binary log-odds
+    assert scores == pytest.approx(expected, abs=1e-4)
+    assert det.info()["positive_labels"] == ["MALICIOUS"]
 
 
 @pytest.fixture(scope="module")

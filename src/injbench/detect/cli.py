@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
-from pathlib import Path
 
-from .paths import data_dir, detect_root, ensure_hf_env, models_dir, reports_dir
+from .paths import (DEVICE_ENV, ROOT_ENV, data_dir, detect_root, ensure_hf_env, models_dir,
+                    reports_dir)
 
 EXIT_UNAVAILABLE = 3
 
@@ -43,7 +44,8 @@ def cmd_build_data(args) -> int:
         templates=tuple(args.templates) if args.templates else None,
         val_templates=tuple(args.val_templates) if args.val_templates else None,
         test_templates=tuple(args.test_templates) if args.test_templates else None,
-        probes=not args.no_probes, augment=not args.no_augment)
+        probes=not args.no_probes, augment=not args.no_augment,
+        compose_negatives=not args.no_compose)
     result = build_dataset(cfg)
     out = write_dataset(result, data_dir(args.root))
     _print_stats(result.manifest)
@@ -128,9 +130,10 @@ def cmd_evaluate(args) -> int:
     rep = evaluate(cal, det.score_segments, root=args.root, split=args.split)
     m = rep[args.split]
     print(f"{args.tag} on {args.split} at the frozen threshold {cal.threshold:.4f}:")
-    for key in ("fpr", "fpr_hard_negatives", "fpr_world_hard_negatives",
-                "fpr_augmented_hard_negatives", "fpr_text_unseen_in_train", "recall",
-                "recall_seen_families", "recall_unseen_families"):
+    for key in ("fpr", "fpr_world_benign", "fpr_hard_negatives", "fpr_world_hard_negatives",
+                "fpr_augmented_hard_negatives", "fpr_composed_negatives",
+                "fpr_text_unseen_in_train", "recall", "recall_seen_families",
+                "recall_unseen_families"):
         print(f"  {key:30s} {_pct(m[key])}")
     print(f"  {'auroc (seen / unseen)':30s} {_fmt(m['auroc'])} ({_fmt(m['auroc_seen_families'])} "
           f"/ {_fmt(m['auroc_unseen_families'])})")
@@ -245,7 +248,8 @@ def cmd_all(args) -> int:
     if args.rebuild or not (data_dir(root) / "manifest.json").exists():
         cmd_build_data(_ns(args, world_seeds=[1, 2, 3], instances=6, instance_seed=0,
                            split_seed=0, templates=None, val_templates=None,
-                           test_templates=None, no_probes=False, no_augment=False))
+                           test_templates=None, no_probes=False, no_augment=False,
+                           no_compose=False))
     if not (models_dir(root) / "modernbert-seed0").is_dir():
         rc = cmd_train(_ns(args, seed=0, epochs=3, batch_size=16, lr=5e-5, max_train_rows=None,
                            base_model=None, out=None))
@@ -291,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--test-templates", nargs="+")
     b.add_argument("--no-probes", action="store_true")
     b.add_argument("--no-augment", action="store_true")
+    b.add_argument("--no-compose", action="store_true", help="no format-matched negatives")
     b.set_defaults(fn=cmd_build_data)
 
     s = sub.add_parser("stats", help="print the dataset card numbers")
@@ -358,6 +363,11 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     load_dotenv()
     ensure_hf_env()
+    # Arms inside an episode only see the environment, so export the choices made here.
+    if args.root:
+        os.environ[ROOT_ENV] = str(args.root)
+    if args.device:
+        os.environ[DEVICE_ENV] = args.device
     return args.fn(args)
 
 

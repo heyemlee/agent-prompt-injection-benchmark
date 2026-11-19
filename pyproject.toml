@@ -16,10 +16,19 @@ detect = [
     "torch>=2.4",
     "transformers>=4.48",
 ]
+# UK AISI Inspect port (src/injbench/inspect_port, docs/inspect.md). Not needed by the core
+# package or the default test run. Tested with inspect-ai 0.3.223 and 0.3.291.
+inspect = [
+    "inspect-ai>=0.3.223",
+]
 
 [project.scripts]
 injbench = "injbench.cli:main"
 injbench-detect = "injbench.detect.cli:main"
+
+# Lets `inspect eval injbench/injbench` find the task (loaded only by Inspect).
+[project.entry-points.inspect_ai]
+injbench = "injbench.inspect_port._registry"
 
 [dependency-groups]
 dev = [

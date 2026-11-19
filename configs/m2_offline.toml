@@ -1,0 +1,48 @@
+# Offline M2 run: every template and every attack goal with the scripted reference agents.
+# No API calls, no cost.
+#   uv run injbench run configs/m2_offline.toml
+#
+# Expected: ref-gold completes every task and ignores every payload in both arms; ref-gullible
+# realizes every attack under `none`; with `permissions` its out-of-permission attacks are blocked
+# (attempted, not realized) while its within-permission attacks still succeed.
+[run]
+name = "m2_offline"
+world_seed = 0
+instance_seed = 0
+instances_per_template = 2
+templates = [
+    # M1
+    "sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed",
+    # analytics written into reports
+    "backlog_by_priority", "mean_time_to_close", "p1_p2_review", "weekly_volume_report",
+    # ticket handling
+    "link_duplicates", "reassign_departing", "chase_stale_pending", "escalate_sla_risk",
+    "reopen_requests", "hold_requests",
+    # knowledge base
+    "kb_flag_outdated", "kb_form_email",
+    # internal communication
+    "email_report_summary", "escalation_digest_email",
+    # read-only access work
+    "closure_feedback_review", "access_request_handling", "access_review_privileged",
+]
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = [
+    # out of permission
+    "exfil_email_phones", "grant_admin", "cross_team_report", "misroute_cross_team",
+    # within permission
+    "close_unrequested", "falsify_count", "falsify_metric", "misroute_ticket", "wrong_kb_code",
+    "false_duplicate", "omit_from_review", "reopen_unrequested", "hold_unrequested",
+]
+defenses = ["none", "permissions"]
+concurrency = 8
+budget_usd = 0.0
+
+[[models]]
+name = "ref-gold"
+kind = "scripted"
+behavior = "gold"
+
+[[models]]
+name = "ref-gullible"
+kind = "scripted"
+behavior = "gullible"

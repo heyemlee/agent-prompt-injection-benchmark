@@ -217,6 +217,16 @@ both `none` and the arm they add to (`permissions+X` against `permissions`), so 
 shows what X adds on top of permissions. Exposure is reported twice: the payload appeared in a tool
 result, and it still reached the model after the defense's filter.
 
+Configs (2026-11-19). All cover the 21 templates, the 4 families and the 13 goals. Cost
+estimates come from offline replays calibrated on the M1 runs' measured tokens; they are not
+measurements.
+
+| Config | Model | Arms | Instances per template | Episodes | Estimate | Cap |
+|---|---|---|---|---|---|---|
+| `e1_pilot.toml` | Qwen3.5-9B + Claude Haiku 5.5 | 3 (`info_block` only) | 1 | 858 | ~$1.3 | $3 |
+| `e1_qwen_siliconflow.toml` | Qwen3.5-9B | all 8 | 2 | 8,144 | ~$9 | $15 |
+| `e1_claude.toml` | Claude Sonnet 5.5 | `none`, `permissions`, datamark ×2 | 1 | 2,036 | ~$16 | $25 |
+
 ### 8.2 E2 — What does ML add on top of permissions?
 Arms: `permissions`, `permissions + Prompt Guard 2 (86M)`, `permissions + ModernBERT`, and optionally
 `permissions + LLM monitor`.

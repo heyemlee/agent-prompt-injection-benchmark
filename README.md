@@ -224,8 +224,9 @@ src/injbench/   world.py  policy.py  env.py  tasks.py  attacks.py  graders.py
   inspect_port/ Inspect task, solver, scorer, log conversion
 configs/        offline: smoke, m2_offline, m2_spotlight_offline, e2_detectors_scripted,
                 attempts_smoke, adaptive_smoke
-                paid: anthropic_smoke, qwen_{openrouter,siliconflow,tinker},
-                e2_detectors_qwen_siliconflow, adaptive_qwen; api_example (template)
+                paid: anthropic_smoke, qwen_{openrouter,siliconflow,tinker}, e1_pilot,
+                e1_qwen_siliconflow, e1_claude, e2_detectors_qwen_siliconflow, adaptive_qwen;
+                api_example (template)
 docs/           templates.md  spotlighting.md  detector.md  attacks.md  inspect.md
 tests/          offline test suite
 ```

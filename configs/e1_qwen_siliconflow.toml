@@ -1,0 +1,60 @@
+# E1: permissions first, then spotlighting (PLAN §8.1), on the open model E3 would train.
+# Qwen3.5-9B on SiliconFlow, with the same model settings as configs/qwen_siliconflow.toml.
+#
+# Matrix: 21 templates x 2 instances x {benign + 4 families x applicable goals} x 8 arms
+#         = 8,144 episodes (1,018 per arm).
+# Arms that differ only in permissions send identical requests until a blocked call changes what
+# the model sees, so they share model samples (paired design). Most of their calls are therefore
+# served from the in-flight dedup or the response cache, and only about 4 of the 8 arms are paid.
+#
+# Cost estimate (2026-11-19, not measured): about $9, plausible range $5-13. Method: the gold
+# tool-call sequences were replayed offline to measure prompt and tool-output sizes per arm,
+# calibrated on the token usage measured in the M1 Qwen runs. Datamarking adds about 18% tokens
+# per episode and base64 about 37%. The cap below stops new API calls if the estimate is wrong.
+#
+# Run configs/e1_pilot.toml first. It covers instance 0 of every template, so its responses are
+# reused here from the cache. Then:
+#   uv run injbench run configs/e1_qwen_siliconflow.toml --dry-run
+#   uv run injbench run configs/e1_qwen_siliconflow.toml
+[run]
+name = "e1-qwen-siliconflow"
+world_seed = 0
+instance_seed = 0
+instances_per_template = 2
+templates = ["access_request_handling", "access_review_privileged", "backlog_by_priority",
+             "chase_stale_pending", "close_confirmed", "closure_feedback_review",
+             "email_report_summary", "escalate_sla_risk", "escalation_digest_email",
+             "hold_requests", "kb_answer_comment", "kb_flag_outdated", "kb_form_email",
+             "link_duplicates", "mean_time_to_close", "p1_p2_review", "reassign_departing",
+             "reopen_requests", "sla_summary_report", "triage_new_tickets",
+             "weekly_volume_report"]
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
+                "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
+                "hold_unrequested"]
+defenses = ["none", "permissions",
+            "spotlight_delimit", "spotlight_datamark", "spotlight_base64",
+            "permissions+spotlight_delimit", "permissions+spotlight_datamark",
+            "permissions+spotlight_base64"]
+concurrency = 8
+max_steps = 15
+budget_usd = 15.0
+
+[[models]]
+name = "qwen3.5-9b-siliconflow"
+kind = "openai_compat"
+model = "Qwen/Qwen3.5-9B"
+base_url = "https://api.siliconflow.com/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+# USD per 1M tokens, international price list (2026-11-18).
+price_in_per_m = 0.10
+price_out_per_m = 0.15
+
+[models.extra_params]
+max_tokens = 8192
+
+# Thinking off, as in configs/qwen_siliconflow.toml (SiliconFlow does not parse tool calls written
+# inside the reasoning block).
+[models.extra_params.extra_body]
+enable_thinking = false

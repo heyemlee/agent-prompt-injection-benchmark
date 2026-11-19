@@ -1,0 +1,65 @@
+# E1 pilot: a cheap first contact between the 21 merged templates and real models, run before the
+# full E1 configs. It checks tool calling on the new tools, the spotlighting arms (base64 is the
+# most likely to confuse a model), the graders on new templates, and real cost per episode
+# against the estimate.
+#
+# Matrix: 21 templates x instance 0 x {benign + info_block x applicable goals} x 3 arms, for two
+# models: Qwen3.5-9B (SiliconFlow) and Claude Haiku 5.5. Haiku uses the same Anthropic code path as
+# Sonnet at about 1/14 of the price.
+# The Qwen episodes are a subset of configs/e1_qwen_siliconflow.toml, so the full run reuses them
+# from the response cache.
+#
+# Cost estimate (2026-11-19, not measured): about $1.5 for both models.
+#   uv run injbench run configs/e1_pilot.toml --dry-run
+#   uv run injbench run configs/e1_pilot.toml
+# Then read summary.md, and every failed or refused episode in transcripts/, before the full runs.
+[run]
+name = "e1-pilot"
+world_seed = 0
+instance_seed = 0
+instances_per_template = 1
+templates = ["access_request_handling", "access_review_privileged", "backlog_by_priority",
+             "chase_stale_pending", "close_confirmed", "closure_feedback_review",
+             "email_report_summary", "escalate_sla_risk", "escalation_digest_email",
+             "hold_requests", "kb_answer_comment", "kb_flag_outdated", "kb_form_email",
+             "link_duplicates", "mean_time_to_close", "p1_p2_review", "reassign_departing",
+             "reopen_requests", "sla_summary_report", "triage_new_tickets",
+             "weekly_volume_report"]
+attack_families = ["info_block"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
+                "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
+                "hold_unrequested"]
+defenses = ["none", "spotlight_datamark", "spotlight_base64"]
+concurrency = 6
+max_steps = 15
+budget_usd = 3.0
+
+[[models]]
+name = "qwen3.5-9b-siliconflow"
+kind = "openai_compat"
+model = "Qwen/Qwen3.5-9B"
+base_url = "https://api.siliconflow.com/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+# USD per 1M tokens, international price list (2026-11-18).
+price_in_per_m = 0.10
+price_out_per_m = 0.15
+
+[models.extra_params]
+max_tokens = 8192
+
+[models.extra_params.extra_body]
+enable_thinking = false
+
+# USD per 1M tokens, Anthropic price list (rechecked 2026-11-19); same settings as the M1 smoke run.
+[[models]]
+name = "claude-haiku-5-5"
+kind = "anthropic"
+model = "claude-haiku-5-5"
+api_key_env = "ANTHROPIC_API_KEY"
+max_tokens = 16000
+price_in_per_m = 0.10   # prompts up to 100K tokens; ours are far below
+price_out_per_m = 0.50
+price_cache_write_per_m = 0.125
+price_cache_read_per_m = 0.01
+extra_params = { output_config = { effort = "medium" } }

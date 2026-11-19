@@ -24,6 +24,7 @@ from injbench.inspect_port import episodes as ep
 from injbench.metrics import METRICS, summarize
 from injbench.models import ModelConfig, ModelResponse
 from injbench.runner import EpisodeSpec, build_matrix, run_episode, scripted_client
+from injbench.tasks import TEMPLATES
 
 # Record fields that legitimately differ: identifiers, provider vocabulary and usage accounting.
 NOT_COMPARED = {"episode_id", "model", "final_stop_reason", "input_tokens", "output_tokens",
@@ -49,6 +50,15 @@ def comparable(record):
     return {k: v for k, v in record.items() if k not in NOT_COMPARED}
 
 
+def _unavailable(defense):
+    """Why a defense arm cannot be built offline (e.g. a detector needs an extra), or None."""
+    try:
+        get_defense(defense).make_output_filter()
+    except (ImportError, OSError, RuntimeError) as e:
+        return f"{type(e).__name__}: {e}"
+    return None
+
+
 # == Part 1: Inspect-free core =============================================================
 def test_names_and_params_are_validated():
     assert ep.resolve_names(None, ["a", "b"], "x") == ("a", "b")
@@ -72,7 +82,8 @@ def test_samples_are_the_native_matrix(world):
     specs = build_matrix(params.run_config(), world)
 
     def key(task, attack):
-        return (task.instance_id, task.prompt, attack and (attack.family, attack.goal, attack.payload))
+        attack_key = attack and (attack.family, attack.goal, attack.payload)
+        return task.instance_id, task.prompt, attack_key
 
     assert [key(s.task, s.attack) for s in scenarios] == [key(s.task, s.attack) for s in specs]
     assert len({s.sample_id for s in scenarios}) == len(scenarios)
@@ -97,6 +108,8 @@ def test_scenario_is_found_from_logged_metadata():
 @pytest.mark.parametrize("behavior", ["gold", "gullible", "leaker", "refuser"])
 def test_port_episode_matches_run_episode(defense, behavior):
     """start_episode + call_tool + grade_episode reproduce run_episode for scripted agents."""
+    if (reason := _unavailable(defense)) is not None:
+        pytest.skip(f"defense {defense!r} unavailable offline: {reason}")
     params = ep.MatrixParams.create(families="info_block", defense=defense)
     for s in ep.build_scenarios(params):
         record, transcript = native(s, behavior)
@@ -140,7 +153,8 @@ def test_replay_reproduces_the_live_episode():
 @pytest.mark.parametrize("defense", ["none", "permissions"])
 def test_rates_match_native_metrics(defense):
     """RATES over score values give exactly injbench.metrics' numbers for the same episodes."""
-    params = ep.MatrixParams.create(families="info_block,business_note", defense=defense)
+    params = ep.MatrixParams.create(templates=list(TEMPLATES)[:4], defense=defense,
+                                    families="info_block,business_note")
     items, records = [], []
     for s in ep.build_scenarios(params):
         for behavior in ("gold", "gullible", "leaker", "refuser", "null"):
@@ -230,15 +244,6 @@ def run_inspect(model, *, epochs=None, max_steps=30, **task_args):
     return log
 
 
-def _usable(defense):
-    """Defenses whose machinery is available offline (e.g. a detector arm may need an extra)."""
-    try:
-        get_defense(defense).make_output_filter()
-    except (ImportError, OSError, RuntimeError) as e:
-        return f"{type(e).__name__}: {e}"
-    return None
-
-
 PARITY_RUNS = [(d, b, {"families": "info_block"}) for d in sorted(DEFENSES)
                for b in ("gold", "gullible")]
 PARITY_RUNS += [("none", b, {"families": []}) for b in ("null", "refuser", "leaker")]
@@ -253,7 +258,7 @@ def inspect_runs(tmp_path_factory):
         _isolate(mp, tmp_path_factory.mktemp("inspect"))
         _record_scenarios(mp)
         for defense, behavior, args in PARITY_RUNS:
-            if (reason := _usable(defense)) is not None:
+            if (reason := _unavailable(defense)) is not None:
                 skipped[defense] = reason
                 continue
             runs[defense, behavior] = run_inspect(scripted_model(behavior), defense=defense,

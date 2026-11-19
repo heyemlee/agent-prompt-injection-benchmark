@@ -1,0 +1,32 @@
+# Offline run of the spotlighting arms with scripted reference agents. No API calls, no cost.
+#   uv run injbench run configs/m2_spotlight_offline.toml
+#
+# Scripted agents replay fixed actions and never read tool output, so every spotlighting arm must
+# score exactly like its base arm (none or permissions). The run checks the plumbing: rendered
+# tool results, per-episode markers in the system prompt, the exposure-after-filter fields and
+# metrics, and grading with spotlighting marks undone. See docs/spotlighting.md.
+[run]
+name = "m2-spotlight-offline"
+world_seed = 0
+instances_per_template = 2
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested"]
+defenses = ["none", "permissions",
+            "spotlight_delimit", "spotlight_datamark", "spotlight_base64",
+            "permissions+spotlight_delimit", "permissions+spotlight_datamark",
+            "permissions+spotlight_base64"]
+concurrency = 8
+
+# Follows the task and ignores every injection.
+[[models]]
+name = "ref-gold"
+kind = "scripted"
+behavior = "gold"
+
+# Does the task and also everything the injection asks.
+[[models]]
+name = "ref-gullible"
+kind = "scripted"
+behavior = "gullible"

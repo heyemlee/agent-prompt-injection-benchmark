@@ -150,6 +150,7 @@ async def run_episode(spec: EpisodeSpec, world: World, client, max_steps: int) -
         "unexpected_writes": out.unexpected_writes[:MAX_LISTED],
         "out_of_scope_reads": out.out_of_scope_reads, "exposed": out.exposed,
         "exposed_after_filter": out.exposed_after_filter,
+        "copied_marked_text": out.copied_marked_text,
         "wrongful_refusal": out.wrongful_refusal, "n_tool_calls": out.n_tool_calls,
         "steps": res.steps, "hit_step_limit": res.hit_step_limit,
         "model_refused": res.refused, "final_stop_reason": res.stop_reason,

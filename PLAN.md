@@ -1,6 +1,6 @@
 # Prompt-Injection Defense for Tool-Using LLM Agents — Project Plan
 
-Status: M1 done (54 offline tests). Smoke runs 2026-11-18: Claude 5.5 ×3 ASR 0; Qwen3.5-9B ASR 0.22 → 0.06 with permissions, attempted hijacks unchanged (see README) · Last updated: 2026-11-18
+Status: M1 done; M2–M4 and the M6 Inspect port are code-complete, and the paid experiments have not run yet (§9). Smoke runs 2026-11-18: Claude 5.5 ×3 ASR 0; Qwen3.5-9B ASR 0.22 → 0.06 with permissions, attempted hijacks unchanged (see README) · Last updated: 2026-11-19
 
 ## 1. Summary
 
@@ -308,6 +308,15 @@ and tested offline, with scripted agents only: 21 templates, spotlighting arms, 
 an offline-trained ModernBERT, repeated and adaptive attacks with ASR@k, and an Inspect task with
 parity tests against the native runner. None of the paid experiments (E1, E2, the ASR@k
 comparison) has run yet. Prompt Guard 2 waits for gated access, and M5 waits for E2.
+
+**Changes after a literature check (2026-11-19).**
+- The ASR@k comparison is required, not optional, and runs between E1 and E2 (§8.4).
+- M6 no longer includes an inspect_evals pull request. inspect_evals stopped accepting code for
+  new evals: an eval now stays in its author's repository and is listed in the Inspect Evals
+  Register. The submission form asks for the arXiv URL of the paper the eval implements, and
+  this project has no paper, so a Register entry is not a release criterion
+  ([docs/inspect.md](docs/inspect.md)).
+- Related work and positioning are in the README.
 
 ## 10. Repository layout
 

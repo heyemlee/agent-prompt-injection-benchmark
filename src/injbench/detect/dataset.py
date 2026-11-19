@@ -54,6 +54,9 @@ DATA_FILES = tuple(f"{s}.jsonl" for s in SPLITS)
 _CLAIM_PRIORITY = {"test": 0, "val": 1, "train": 2}
 _ORIGIN_PRIORITY = {"replay": 0, "probe": 1, "augment": 2, "composed": 3}
 _NAME_KEYS = frozenset({"requester", "author", "name"})
+# One text can arrive through several fields (a note body via get_ticket and the same text as a
+# run_sql alias column); its deduplicated row takes the most specific kind seen.
+_KIND_PRIORITY = {"body": 0, "title": 1, "name": 2, "other": 3}
 
 
 def world_hard_negatives() -> dict[str, str]:
@@ -485,7 +488,8 @@ def _dedup(occs: list[Occurrence], heldout: tuple[str, ...]) -> dict[str, list[d
             "world_seeds": sorted({o.world_seed for o in group if o.world_seed is not None}),
             "tools": sorted({o.tool for o in group if o.tool}),
             "fields": sorted({o.field for o in group if o.field}),
-            "field_kind": first.field_kind,
+            "field_kind": min((o.field_kind for o in group),
+                              key=lambda k: _KIND_PRIORITY.get(k, len(_KIND_PRIORITY))),
             "sources": sorted({o.source for o in group}),
             "count": len(group),
             "n_chars": len(text),

@@ -2,7 +2,6 @@
 
 import pytest
 
-from injbench import tasks as tasks_mod
 from injbench.attacks import FAMILIES
 from injbench.detect.dataset import (SPLITS, DatasetConfig, assign_template_splits,
                                      build_dataset, load_split, replay, write_dataset)
@@ -138,19 +137,16 @@ def test_template_split_assignment():
         assign_template_splits(["a", "b", "c"], val=["a", "b", "c"])
 
 
-def test_new_templates_flow_in_without_code_changes(world, monkeypatch):
-    """With 20 templates (aliases of the M1 makers here), the split stays template-disjoint."""
-    makers = list(TEMPLATES.items())
-    for i in range(16):
-        name, maker = makers[i % len(makers)]
-        monkeypatch.setitem(tasks_mod.TEMPLATES, f"{name}_v{i}", maker)
-    assert len(TEMPLATES) == 20
+def test_new_templates_flow_in_without_code_changes(world):
+    """M2's templates arrive through the public registry; the split stays template-disjoint."""
+    assert len(TEMPLATES) >= 20
     res = build_dataset(DatasetConfig(world_seeds=(0,), instances_per_template=1,
                                       probes=False, augment=False), worlds={0: world})
     splits = res.manifest["template_splits"]
-    assert len(splits) == 20 and res.manifest["template_disjoint"]
-    assert {s: list(splits.values()).count(s) for s in SPLITS} == {
-        "train": 10, "val": 5, "test": 5}
+    assert set(splits) == set(TEMPLATES) and res.manifest["template_disjoint"]
+    counts = {s: list(splits.values()).count(s) for s in SPLITS}
+    assert counts["val"] >= 5 and counts["test"] >= 5
+    assert counts["train"] >= len(TEMPLATES) // 2
     for split, rows in res.rows.items():
         assert {t for r in rows for t in r["templates"]} <= {
             t for t, s in splits.items() if s == split}

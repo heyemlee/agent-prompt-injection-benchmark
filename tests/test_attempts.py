@@ -159,7 +159,8 @@ def test_repeated_smoke_run_reports_asr_at_k(tmp_path):
     assert manifest["config"]["attempts"] == 3
 
 
-@pytest.mark.parametrize("name", ["attempts_smoke.toml"])
+@pytest.mark.parametrize("name", ["attempts_smoke.toml", "adaptive_smoke.toml",
+                                  "adaptive_qwen.toml"])
 def test_new_configs_dry_run(name, capsys):
     assert main(["run", str(CONFIGS / name), "--dry-run"]) == 0
     assert "episodes" in capsys.readouterr().out

@@ -69,6 +69,12 @@ def world_hard_negatives() -> dict[str, str]:
 @dataclass(frozen=True)
 class DatasetConfig:
     world_seeds: tuple[int, ...] = (1, 2, 3)  # the benchmark world is seed 0; keep it out
+    # With template-disjoint splits, val and test templates run in worlds of their own, so no
+    # ticket or article can reach two splits and nothing has to be dropped for source
+    # disjointness. None: that split shares `world_seeds`, and each shared record then goes to
+    # one split (test claims first, then val), which with 21 templates drops most train data.
+    val_world_seeds: tuple[int, ...] | None = (4, 5)
+    test_world_seeds: tuple[int, ...] | None = (6, 7)
     instances_per_template: int = 6
     instance_seed: int = 0
     templates: tuple[str, ...] | None = None  # None: every template in TEMPLATES
@@ -88,6 +94,10 @@ class DatasetConfig:
         return DatasetConfig(**{
             **asdict(self),
             "world_seeds": tuple(self.world_seeds),
+            "val_world_seeds": (None if self.val_world_seeds is None
+                                else tuple(self.val_world_seeds)),
+            "test_world_seeds": (None if self.test_world_seeds is None
+                                 else tuple(self.test_world_seeds)),
             "templates": tuple(sorted(self.templates or TEMPLATES)),
             "families": tuple(self.families or FAMILIES),
             "goals": tuple(self.goals or GOALS),
@@ -96,6 +106,26 @@ class DatasetConfig:
             "test_templates": tuple(self.test_templates) if self.test_templates else None,
             "fractions": tuple(self.fractions),
         })
+
+    def split_world_seeds(self, template_disjoint: bool) -> dict[str, tuple[int, ...]]:
+        """World seeds per split. Separate worlds need template-disjoint splits; with
+        instance-level splits every split uses `world_seeds`."""
+        base = tuple(self.world_seeds)
+        seeds = {split: base for split in SPLITS}
+        own: list[str] = []
+        if template_disjoint:
+            for split, extra in (("val", self.val_world_seeds), ("test", self.test_world_seeds)):
+                if extra is not None:
+                    seeds[split] = tuple(extra)
+                    own.append(split)
+        for split in own:
+            if not seeds[split]:
+                raise ValueError(f"{split}_world_seeds is empty; use None to share world_seeds")
+            for other in SPLITS:
+                if other != split and set(seeds[split]) & set(seeds[other]):
+                    raise ValueError(f"{split} world seeds {seeds[split]} overlap the {other} "
+                                     f"split's {seeds[other]}")
+        return seeds
 
 
 @dataclass
@@ -308,6 +338,9 @@ def build_dataset(cfg: DatasetConfig | None = None,
     tsplit = assign_template_splits(cfg.templates, cfg.fractions, cfg.split_seed,
                                     cfg.val_templates, cfg.test_templates)
     template_disjoint = bool(tsplit)
+    split_seeds = cfg.split_world_seeds(template_disjoint)
+    all_seeds = list(dict.fromkeys(s for split in SPLITS for s in split_seeds[split]))
+    world_split = {seed: [s for s in SPLITS if seed in split_seeds[s]] for seed in all_seeds}
     occs: list[Occurrence] = []
     calls: list[dict] = []
     skipped: list[dict] = []
@@ -315,9 +348,11 @@ def build_dataset(cfg: DatasetConfig | None = None,
     read_calls: list[int] = []
     heldout_dropped = 0
 
-    for seed in cfg.world_seeds:
+    for seed in all_seeds:
         world = (worlds or {}).get(seed) or build_world(seed)
         for template in cfg.templates:
+            if template_disjoint and seed not in split_seeds[tsplit[template]]:
+                continue  # this template's split runs in other worlds
             try:
                 tasks = build_instances(world, [template], cfg.instances_per_template,
                                         cfg.instance_seed)
@@ -366,9 +401,10 @@ def build_dataset(cfg: DatasetConfig | None = None,
 
     probe_count = 0
     if cfg.probes:
-        for seed in cfg.world_seeds:
+        for seed in all_seeds:
             world = (worlds or {}).get(seed) or build_world(seed)
-            probe_occs = _probe_hard_negatives(world, seed, cfg, owner, hn)
+            only = world_split[seed][0] if len(world_split[seed]) == 1 else None
+            probe_occs = _probe_hard_negatives(world, seed, cfg, owner, hn, split=only)
             probe_count += len({o.instance_id for o in probe_occs})
             occs += probe_occs
     if cfg.augment:
@@ -392,6 +428,7 @@ def build_dataset(cfg: DatasetConfig | None = None,
     rows = _dedup(occs, cfg.heldout_families)
     manifest = _manifest(cfg, rows, tsplit, template_disjoint, dropped, heldout_dropped,
                          skipped, unexposed, read_calls, probe_count)
+    manifest["split_world_seeds"] = {s: list(split_seeds[s]) for s in SPLITS}
     return BuildResult(rows=rows, manifest=manifest, calls=_dedup_calls(calls))
 
 
@@ -426,8 +463,9 @@ def _compose_negatives(occs: list[Occurrence], cfg: DatasetConfig) -> list[Occur
 
 
 def _probe_hard_negatives(world: World, seed: int, cfg: DatasetConfig, owner: dict[str, str],
-                          hn: dict[str, str]) -> list[Occurrence]:
-    """`get_ticket` on unclaimed tickets that carry a world hard negative, spread over splits."""
+                          hn: dict[str, str], split: str | None = None) -> list[Occurrence]:
+    """`get_ticket` on unclaimed tickets that carry a world hard negative, spread over splits,
+    or all in `split` when the world belongs to that split alone."""
     conn, truth = world.conn, world.truth
     kinds = {"escalation_request": sorted(truth.escalation_ticket_ids),
              "resolution_confirmation": sorted(truth.confirmed_resolved_ids)}
@@ -439,7 +477,8 @@ def _probe_hard_negatives(world: World, seed: int, cfg: DatasetConfig, owner: di
                 "SELECT key, team_id FROM tickets WHERE id = ?", (tid,)).fetchone()
             if f"w{seed}:ticket:{key}" not in owner:
                 keys[key] = team_id
-        assign = _spread(keys, cfg.fractions, cfg.split_seed, "probe", seed, kind)
+        assign = ({key: split for key in keys} if split else
+                  _spread(keys, cfg.fractions, cfg.split_seed, "probe", seed, kind))
         for key in sorted(keys):
             lead = conn.execute("SELECT lead_user_id FROM teams WHERE id = ?",
                                 (keys[key],)).fetchone()[0]

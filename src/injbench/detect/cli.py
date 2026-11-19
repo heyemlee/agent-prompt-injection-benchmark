@@ -39,7 +39,10 @@ def cmd_build_data(args) -> int:
     from .dataset import DatasetConfig, build_dataset, write_dataset
 
     cfg = DatasetConfig(
-        world_seeds=tuple(args.world_seeds), instances_per_template=args.instances,
+        world_seeds=tuple(args.world_seeds),
+        val_world_seeds=tuple(args.val_world_seeds) or None,
+        test_world_seeds=tuple(args.test_world_seeds) or None,
+        instances_per_template=args.instances,
         instance_seed=args.instance_seed, split_seed=args.split_seed,
         templates=tuple(args.templates) if args.templates else None,
         val_templates=tuple(args.val_templates) if args.val_templates else None,
@@ -247,7 +250,8 @@ def cmd_all(args) -> int:
 
     root = args.root
     if args.rebuild or not (data_dir(root) / "manifest.json").exists():
-        cmd_build_data(_ns(args, world_seeds=[1, 2, 3], instances=6, instance_seed=0,
+        cmd_build_data(_ns(args, world_seeds=[1, 2, 3], val_world_seeds=[4, 5],
+                           test_world_seeds=[6, 7], instances=6, instance_seed=0,
                            split_seed=0, templates=None, val_templates=None,
                            test_templates=None, no_probes=False, no_augment=False,
                            no_compose=False))
@@ -288,7 +292,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build-data", help="build the labeled segment dataset (no torch needed)")
-    b.add_argument("--world-seeds", type=int, nargs="+", default=[1, 2, 3])
+    b.add_argument("--world-seeds", type=int, nargs="+", default=[1, 2, 3],
+                   help="train worlds (all splits' worlds when the two below are empty)")
+    b.add_argument("--val-world-seeds", type=int, nargs="*", default=[4, 5],
+                   help="worlds of the val templates; pass no value to share --world-seeds")
+    b.add_argument("--test-world-seeds", type=int, nargs="*", default=[6, 7],
+                   help="worlds of the test templates; pass no value to share --world-seeds")
     b.add_argument("--instances", type=int, default=6, help="instances per template per world")
     b.add_argument("--instance-seed", type=int, default=0)
     b.add_argument("--split-seed", type=int, default=0)

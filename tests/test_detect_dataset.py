@@ -11,17 +11,18 @@ from injbench.tasks import TEMPLATES, build_instances
 # The static text before the instruction in each family's payload, e.g. "[SYSTEM NOTICE ".
 PREFIX = {name: tmpl.split("{")[0] for name, tmpl in FAMILIES.items()}
 PSEUDO = {"probe", "augment"}
+# Train templates run in world 0, val templates in world 4, test templates in world 5.
+CFG = DatasetConfig(world_seeds=(0,), val_world_seeds=(4,), test_world_seeds=(5,),
+                    instances_per_template=2)
 
 
 @pytest.fixture(scope="module")
 def built(world):
-    return build_dataset(DatasetConfig(world_seeds=(0,), instances_per_template=2),
-                         worlds={0: world})
+    return build_dataset(CFG, worlds={0: world})
 
 
 def test_build_is_deterministic(world, tmp_path, built):
-    again = build_dataset(DatasetConfig(world_seeds=(0,), instances_per_template=2),
-                          worlds={0: world})
+    again = build_dataset(CFG, worlds={0: world})
     assert again.manifest["fingerprint"] == built.manifest["fingerprint"]
     assert again.rows == built.rows
     a, b = tmp_path / "a", tmp_path / "b"
@@ -48,12 +49,44 @@ def test_labels(built):
 
 
 def test_rows_record_provenance(built):
-    for rows in built.rows.values():
+    worlds = built.manifest["split_world_seeds"]
+    assert worlds == {"train": [0], "val": [4], "test": [5]}
+    for split, rows in built.rows.items():
         for r in rows:
             assert r["templates"] and r["instance_ids"] and r["sources"] and r["count"] >= 1
             if r["origin"] != "augment":
-                assert r["tools"] and r["fields"] and r["world_seeds"] == [0]
+                assert r["tools"] and r["fields"] and r["world_seeds"] == worlds[split]
                 assert not set(r["tools"]) & WRITE_TOOLS
+
+
+def test_split_worlds_keep_every_template(built):
+    """Separate worlds per split make records disjoint by construction: nothing is dropped,
+    and every template contributes injected segments to its split."""
+    assert not any(built.manifest["dropped_for_source_disjointness"].values())
+    injected = {t for rows in built.rows.values() for r in rows if r["label"] == 1
+                for t in r["templates"]}
+    assert injected == set(TEMPLATES)
+
+
+def test_shared_worlds_fall_back_to_claiming_records(world):
+    shared = build_dataset(DatasetConfig(world_seeds=(0,), val_world_seeds=None,
+                                         test_world_seeds=None, instances_per_template=1,
+                                         probes=False, augment=False), worlds={0: world})
+    m = shared.manifest
+    assert m["split_world_seeds"] == {"train": [0], "val": [0], "test": [0]}
+    assert not any(m["source_overlap_between_splits"].values())
+    assert sum(m["dropped_for_source_disjointness"].values()) > 0
+
+
+def test_split_world_seeds_must_not_overlap():
+    with pytest.raises(ValueError, match="overlap"):
+        DatasetConfig(world_seeds=(1, 2), val_world_seeds=(2,)).split_world_seeds(True)
+    with pytest.raises(ValueError, match="overlap"):
+        DatasetConfig(val_world_seeds=(4,), test_world_seeds=(4,)).split_world_seeds(True)
+    with pytest.raises(ValueError, match="empty"):
+        DatasetConfig(test_world_seeds=()).split_world_seeds(True)
+    # Instance-level splits (fewer than three templates) keep every split in the train worlds.
+    assert DatasetConfig().split_world_seeds(False) == {s: (1, 2, 3) for s in SPLITS}
 
 
 def test_splits_are_disjoint(built):

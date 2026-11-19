@@ -266,11 +266,13 @@ print(to_markdown(summarize(records)))   # one arm per defense; paired differenc
 
 The tests are designed to fail when the port falls behind the native runner:
 
-1. **Spotlighting renderer (M2).** After `Environment` applies `Defense.make_output_renderer()`,
-   pass it in `episodes.start_episode`, the single construction site, exactly as `run_episode`
-   does.
+1. **Spotlighting renderer (M2). Done at the merge.** `episodes.start_episode`, the single
+   construction site, builds the per-episode defense exactly as `run_episode` does
+   (`Scenario.episode_defense(attempt)`, seeded by `runner.defense_seed`) and passes its output
+   renderer. The solver uses that defense's system addendum, and the attempt is the Inspect epoch
+   minus one.
    - `test_inspect_run_matches_native_runner` compares every tool output with the native
-     transcript for every defense in `DEFENSES`, so it fails until the renderer is passed.
+     transcript for every defense in `DEFENSES`.
    - `test_port_episode_matches_run_episode` checks the same without Inspect.
 2. **New fields in the native record.** Map them in `episodes.episode_record`.
    `test_port_episode_matches_run_episode` compares whole records and names the missing field.

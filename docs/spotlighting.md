@@ -264,16 +264,14 @@ needs real models.
 
 ## Open questions (for the coordinator)
 
-1. **Marker per attempt or per instance?** The marker changes per attempt (secure against
-   feedback-driven attacks, realistic). As a consequence, at temperature 0 repeated attempts in a
-   spotlight arm differ from each other while `none`'s do not. M4 should name the marker as a
-   randomness source. Alternatively, `runner.episode_seed` can key off M4's
-   `EpisodeSpec.sampling_attempt` instead of `attempt` once that branch is merged, so that the
-   marker changes only when the model's sample does. It can also drop the attempt altogether.
-   Either is a one-line change.
-2. **Pair against `permissions` too.** `summarize()` pairs every arm only against `none`. The
-   informative pairings for `permissions+spotlight_*` are against `permissions` and against
-   `spotlight_*`. That code is outside this stream (`metrics.summarize`).
+1. **Marker per attempt or per instance? Decided at the merge: per attempt.** A deployed system
+   draws a fresh marker per request, and a per-attempt marker keeps the adaptive attacker from
+   reusing a delimiter it saw in feedback. The cost: at temperature 0, repeated attempts in a
+   spotlight arm differ from each other through the marker, while `none`'s do not. PLAN §6
+   records the marker as part of the defense, not as the attempt's randomness source.
+2. **Pair against `permissions` too. Done at the merge.** `metrics.comparison_baselines` pairs a
+   stacked arm `A+B` with `A` as well as with `none`, so `permissions+spotlight_*` is compared
+   with `permissions`. Pairing it with `spotlight_*` is still open.
 3. **Composite arms (detector + spotlighting).** The hook order already supports them: a
    `Defense` subclass whose `make_output_filter` is the detector and whose `make_output_renderer`
    returns `spotlight.Spotlighter(mode, marker)`, plus `for_episode` as in `SpotlightDefense`.

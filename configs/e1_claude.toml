@@ -8,8 +8,11 @@
 # arms are paid.
 #
 # Cost estimate (2026-11-19, not measured): about $16, plausible range $9-23. Method as in
-# configs/e1_qwen_siliconflow.toml, calibrated on the M1 Claude runs. Alternatives, same matrix:
-#   - Haiku 5.5, all 8 arms: about $2.3.
+# configs/e1_qwen_siliconflow.toml, calibrated on the M1 Claude runs. The E1 pilot checked it on
+# Haiku 5.5: the cost paid per episode was 0.8-1.1x this method's estimate, and no permissions
+# twin ever diverged (Haiku made no out-of-scope call or read in 429 episodes), so only the
+# unpermissioned arms are paid. Expect about $14-16. Alternatives, same matrix:
+#   - Haiku 5.5, all 8 arms: about $1.5-2 (the pilot's Haiku episodes replay from the cache).
 #   - Sonnet 5.5, all 8 arms: about $33.
 #   - Opus 5.5, these 4 arms: about $41.
 # To use one of them, copy that model's block from configs/anthropic_smoke.toml and set `defenses`

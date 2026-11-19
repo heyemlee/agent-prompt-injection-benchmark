@@ -10,6 +10,10 @@
 # from the response cache.
 #
 # Cost estimate (2026-11-19, not measured): about $1.5 for both models.
+# Measured: $2.04 in all. The first pass ($0.68) lost 299 Qwen episodes to SiliconFlow's
+# per-minute quota (429 "TPM limit reached"); the rerun ($1.36) replayed the finished calls from
+# the cache and made the rest. Qwen cost 1.7-2.9x the estimate per episode (it takes more steps
+# than the gold path; see configs/e1_qwen_siliconflow.toml); Haiku cost 0.8-1.1x.
 #   uv run injbench run configs/e1_pilot.toml --dry-run
 #   uv run injbench run configs/e1_pilot.toml
 # Then read summary.md, and every failed or refused episode in transcripts/, before the full runs.

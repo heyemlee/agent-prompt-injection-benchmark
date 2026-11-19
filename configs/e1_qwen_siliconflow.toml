@@ -7,16 +7,23 @@
 # the model sees, so they share model samples (paired design). Most of their calls are therefore
 # served from the in-flight dedup or the response cache, and only about 4 of the 8 arms are paid.
 #
-# Cost estimate (2026-11-19, not measured): about $9, plausible range $5-13. Method: the gold
-# tool-call sequences were replayed offline to measure prompt and tool-output sizes per arm,
-# calibrated on the token usage measured in the M1 Qwen runs. Datamarking adds about 18% tokens
-# per episode and base64 about 37%. The cap below stops new API calls if the estimate is wrong.
-# The pilot measured about half the estimated cost per episode on Qwen.
+# Cost, measured in the E1 pilot (2026-11-19, configs/e1_pilot.toml, 429 Qwen episodes). Qwen takes
+# about 7 steps per episode where the gold path takes 4.5, so an episode's tokens cost $0.0039
+# with no defense, $0.0033 with datamarking and $0.0067 with base64 (base64 episodes use about
+# 1.75x the tokens). That is 1.7-2.9x the offline estimate made before the pilot, which gave about
+# $9 for this matrix. Episodes of one task instance share their first requests, so about 80% of
+# the token cost is paid. A permissions twin pays again from the first call whose result differs
+# (a blocked call, or a scoped read that returns fewer rows): replaying the pilot's calls under
+# permissions, that adds 29-41% of the base arm's cost (Qwen often queries without a team filter).
+# Estimate for this matrix: about $19 (range $14-24) beyond what the pilot cached, so raise the
+# cap below to about $30 before running it. With instances_per_template = 1: about $8.5 (range
+# $6-11), within the cap. The cap stops new API calls if the estimate is wrong.
 #
-# Throughput: in the pilot, this SiliconFlow account sustained about 80K tokens/min, about 23 calls
-# a minute. Above that it answers 429 "TPM limit reached". So concurrency is 2, retries wait out
-# the quota window, and the full run takes on the order of 13 hours. A run that stops (quota,
-# sleep, network) can be resumed: rerun the config, and finished calls replay from the cache at $0.
+# Throughput: this SiliconFlow account sustains about 80K tokens/min for this model (limits are
+# per account and rise with monthly spend). Above that it answers 429 "TPM limit reached" and the
+# client's retries wait out the window, so this matrix takes about 37 hours, or about 17 with one
+# instance. A run that stops (quota, sleep, network) can be resumed: rerun the config, and
+# finished calls replay from the cache at $0.
 #
 # Run configs/e1_pilot.toml first. It covers instance 0 of every template, so its responses are
 # reused here from the cache. Then:

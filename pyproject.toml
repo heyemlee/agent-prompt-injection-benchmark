@@ -1,0 +1,29 @@
+[project]
+name = "injbench"
+version = "0.1.0"
+description = "Prompt-injection benchmark and defenses for tool-using LLM agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.10.0",
+    "openai>=1.40",
+]
+
+[project.scripts]
+injbench = "injbench.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/injbench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

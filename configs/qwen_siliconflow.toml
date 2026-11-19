@@ -1,0 +1,47 @@
+# Qwen3.5-9B on SiliconFlow (international site, cloud.siliconflow.com), OpenAI-compatible API.
+# Same 44-episode matrix as the Claude and OpenRouter configs, so results line up.
+#
+# 1. Create an API key in the SiliconFlow console yourself, then add it to .env:
+#      SILICONFLOW_API_KEY=...
+#    (China-site keys use https://api.siliconflow.cn/v1 instead; change base_url to match.)
+# 2. uv run injbench run configs/qwen_siliconflow.toml --dry-run
+#    uv run injbench run configs/qwen_siliconflow.toml
+#
+# Notes:
+# - SiliconFlow serves this model in FP8; OpenRouter's bf16 providers and Tinker use bf16 weights.
+#   Numbers are comparable within one provider, so record which config produced them.
+# - The model ID follows SiliconFlow's "Qwen/Qwen3.5-..." naming. Confirm it (GET /v1/models or
+#   the console's model page, including the Tools tag) before a long run.
+# - Rough cost estimate (not measured): well under $0.20 for the whole run.
+[run]
+name = "qwen-siliconflow-smoke"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+defenses = ["none", "permissions"]
+concurrency = 4
+max_steps = 15
+budget_usd = 2.0
+
+[[models]]
+name = "qwen3.5-9b-siliconflow"
+kind = "openai_compat"
+model = "Qwen/Qwen3.5-9B"
+base_url = "https://api.siliconflow.com/v1"
+api_key_env = "SILICONFLOW_API_KEY"
+# USD per 1M tokens, international price list (2026-11-18).
+price_in_per_m = 0.10
+price_out_per_m = 0.15
+
+[models.extra_params]
+max_tokens = 8192
+
+# Thinking mode is off. With it on, Qwen3.5-9B often writes its tool call inside the reasoning
+# block (Qwen's <tool_call><function=...> syntax). SiliconFlow does not parse calls from there,
+# so the turn ends as an empty reply. In replays on 2026-11-18 that happened in 2 of 3 tries with
+# thinking on, and 4 of 4 tool calls came back correctly with it off. This measures the agent,
+# not a provider parsing gap; Claude runs keep their adaptive thinking.
+[models.extra_params.extra_body]
+enable_thinking = false

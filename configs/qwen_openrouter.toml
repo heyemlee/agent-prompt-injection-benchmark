@@ -1,0 +1,44 @@
+# Qwen3.5-9B through OpenRouter: an open-weights model that Tinker can also fine-tune later (E3).
+# Same 44-episode matrix as configs/anthropic_smoke.toml, so the results line up with the Claude run.
+#
+# 1. Create an OpenRouter account and API key yourself, then add the key to .env:
+#      OPENROUTER_API_KEY=...
+# 2. uv run injbench run configs/qwen_openrouter.toml --dry-run
+#    uv run injbench run configs/qwen_openrouter.toml
+#
+# Rough cost estimate (not measured): well under $0.50 for the whole run.
+[run]
+name = "qwen-openrouter-smoke"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+defenses = ["none", "permissions"]
+concurrency = 4
+max_steps = 15
+budget_usd = 2.0
+
+[[models]]
+name = "qwen3.5-9b"
+kind = "openai_compat"
+model = "qwen/qwen3.5-9b"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+# USD per 1M tokens: the highest price among the bf16 providers that support tools on
+# 2026-11-18 (OpenRouter /api/v1/models/qwen/qwen3.5-9b/endpoints). The budget cap uses these
+# prices, so the cap is conservative. The serving provider is recorded with every response.
+price_in_per_m = 0.17
+price_out_per_m = 0.25
+
+[models.extra_params]
+max_tokens = 8192
+
+# OpenRouter routing: only full-precision (bf16) providers that accept every request parameter
+# (including tools), DeepInfra first. Pinning the precision keeps runs comparable over time and
+# with the bf16 weights Tinker would fine-tune.
+[models.extra_params.extra_body.provider]
+order = ["deepinfra"]
+allow_fallbacks = true
+require_parameters = true
+quantizations = ["bf16"]

@@ -1,0 +1,24 @@
+# Offline smoke run with scripted reference agents. No API calls, no cost.
+#   uv run injbench run configs/smoke.toml
+[run]
+name = "smoke"
+world_seed = 0
+instances_per_template = 2
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested"]
+defenses = ["none", "permissions"]
+concurrency = 8
+
+# Follows the task and ignores every injection.
+[[models]]
+name = "ref-gold"
+kind = "scripted"
+behavior = "gold"
+
+# Does the task and also everything the injection asks.
+[[models]]
+name = "ref-gullible"
+kind = "scripted"
+behavior = "gullible"

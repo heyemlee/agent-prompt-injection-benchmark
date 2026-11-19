@@ -1,0 +1,38 @@
+# Qwen through Tinker's Anthropic-compatible API (beta). This is the serving stack that would
+# also run fine-tuned checkpoints (tinker://... paths) in E3, so base and trained models are
+# compared on identical infrastructure.
+#
+# UNVERIFIED until the first real call. The base URL comes from Tinker's docs (2026-11-18) and the
+# model name is an assumption: check both against your Tinker console or docs before running.
+# The endpoint is labelled beta for testing and low traffic, it ignores prompt caching, and thinking
+# signatures come back empty.
+#
+# 1. Create a Tinker account and API key yourself, then add the key to .env:
+#      TINKER_API_KEY=...
+# 2. uv run injbench run configs/qwen_tinker.toml --dry-run
+#    uv run injbench run configs/qwen_tinker.toml
+[run]
+name = "qwen-tinker-smoke"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+defenses = ["none", "permissions"]
+concurrency = 2
+max_steps = 15
+budget_usd = 2.0
+
+[[models]]
+name = "qwen3.5-9b-tinker"
+kind = "anthropic"
+model = "Qwen/Qwen3.5-9B"   # assumption: verify the exact name on Tinker
+base_url = "https://tinker.thinkingmachines.dev/services/tinker-prod/anthropic/api"
+api_key_env = "TINKER_API_KEY"
+max_tokens = 8192
+# Tinker prices for Qwen3.5-9B as of 2026-10-19, USD per 1M tokens: prefill 0.30, sample 0.807.
+# There is no prompt caching on this endpoint, so any cache fields are priced as plain input.
+price_in_per_m = 0.30
+price_out_per_m = 0.807
+price_cache_write_per_m = 0.30
+price_cache_read_per_m = 0.30

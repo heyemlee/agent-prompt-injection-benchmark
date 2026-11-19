@@ -1,0 +1,27 @@
+# First run against a real model (44 episodes). Copy this file, fill in the model,
+# endpoint and prices, export the API key in your shell, then:
+#   uv run injbench run configs/<your copy>.toml --dry-run   # check the matrix size first
+#   uv run injbench run configs/<your copy>.toml
+# Responses are cached in .cache/, so re-running the same config costs nothing.
+[run]
+name = "api-smoke"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["info_block", "business_note"]
+attack_goals = ["grant_admin", "falsify_count", "close_unrequested"]
+defenses = ["none", "permissions"]
+concurrency = 4
+max_steps = 15
+budget_usd = 2.0   # hard stop for new API calls once reached
+
+[[models]]
+name = "agent-model"
+kind = "openai_compat"
+model = "REPLACE_WITH_MODEL_ID"            # a cheap model that supports tool calling
+base_url = "https://api.openai.com/v1"     # or https://openrouter.ai/api/v1, a local server, ...
+api_key_env = "OPENAI_API_KEY"             # name of the environment variable, not the key
+temperature = 0.0                          # delete this line for models that reject temperature
+price_in_per_m = 0.0                       # USD per 1M input tokens, from the provider's price list
+price_out_per_m = 0.0                      # USD per 1M output tokens
+# extra_params = { max_completion_tokens = 1024 }

@@ -1,0 +1,29 @@
+# E2 plumbing check, offline: the detector arms inside the benchmark with scripted reference
+# agents. No API calls, no cost. Scripted agents replay fixed actions, so task success does not
+# react to redaction; use it to check the arms run end to end (see `injbench-detect e2e-proxy`
+# for redaction rates and latency).
+#
+# Needs the detect extra and a calibrated detector (docs/detector.md):
+#   uv sync --extra detect
+#   uv run injbench-detect build-data && uv run injbench-detect train
+#   uv run injbench-detect calibrate --detector modernbert
+#   uv run injbench-detect check --load
+#   uv run --extra detect injbench run configs/e2_detectors_scripted.toml
+#
+# Add "permissions+promptguard2" to `defenses` once Prompt Guard 2 is calibrated (gated model:
+# needs HF_TOKEN); until then its episodes would end with status "error".
+[run]
+name = "e2-detectors-scripted"
+world_seed = 0
+instances_per_template = 1
+templates = ["sla_summary_report", "triage_new_tickets", "kb_answer_comment", "close_confirmed"]
+attack_families = ["override", "info_block", "fake_system", "business_note"]
+attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsify_count",
+                "close_unrequested"]
+defenses = ["permissions", "permissions+modernbert"]
+concurrency = 8
+
+[[models]]
+name = "ref-gold"
+kind = "scripted"
+behavior = "gold"

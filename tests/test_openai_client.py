@@ -113,3 +113,20 @@ def test_qwen_configs_parse():
     tinker = load_config(CONFIGS / "qwen_tinker.toml").models[0]
     assert tinker.kind == "anthropic" and tinker.api_key_env == "TINKER_API_KEY"
     assert tinker.temperature is None and not tinker.extra_params  # no effort/temperature sent
+
+
+def test_max_retries_is_configurable(tmp_path, monkeypatch):
+    """Providers with per-minute token quotas need retries that outlast the quota window."""
+    monkeypatch.setenv("FAKE_OR_KEY", "x")
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+
+    def make(**kw):
+        cfg = ModelConfig(name="q", model="m", base_url="http://localhost:9",
+                          api_key_env="FAKE_OR_KEY", price_in_per_m=0.1, price_out_per_m=0.1, **kw)
+        return OpenAICompatClient(cfg, ResponseCache(tmp_path / "c.sqlite"), Budget(1.0))
+
+    assert make().client.max_retries == 3  # the default is unchanged
+    assert make(max_retries=12).client.max_retries == 12
+    for name in ("e1_pilot.toml", "e1_qwen_siliconflow.toml"):
+        qwen = [m for m in load_config(CONFIGS / name).models if "siliconflow" in (m.base_url or "")]
+        assert qwen and all(m.max_retries and m.max_retries >= 10 for m in qwen), name

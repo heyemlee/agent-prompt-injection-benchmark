@@ -31,7 +31,7 @@ attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsi
                 "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
                 "hold_unrequested"]
 defenses = ["none", "spotlight_datamark", "spotlight_base64"]
-concurrency = 6
+concurrency = 3
 max_steps = 15
 budget_usd = 3.0
 
@@ -41,6 +41,7 @@ kind = "openai_compat"
 model = "Qwen/Qwen3.5-9B"
 base_url = "https://api.siliconflow.com/v1"
 api_key_env = "SILICONFLOW_API_KEY"
+max_retries = 12  # SiliconFlow quotas are per minute (429 "TPM limit reached"); retries outlast the window
 # USD per 1M tokens, international price list (2026-11-18).
 price_in_per_m = 0.10
 price_out_per_m = 0.15

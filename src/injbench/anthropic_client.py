@@ -120,7 +120,8 @@ class AnthropicClient:
         if not key:
             raise RuntimeError(f"model {cfg.name!r}: set {cfg.api_key_env} in your shell or in a "
                                f".env file in the project folder")
-        kwargs: dict[str, Any] = {"api_key": key, "max_retries": 4, "timeout": 300.0}
+        kwargs: dict[str, Any] = {"api_key": key, "timeout": 300.0,
+                                  "max_retries": 4 if cfg.max_retries is None else cfg.max_retries}
         if cfg.base_url:
             kwargs["base_url"] = cfg.base_url
         if (http_client := custom_ca_http_client()) is not None:

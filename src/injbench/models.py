@@ -32,6 +32,10 @@ class ModelConfig:
     price_cache_read_per_m: float | None = None  # default 0.1x input
     extra_params: dict = field(default_factory=dict)
     behavior: str = "gold"  # scripted only: gold | gullible | null | refuser | leaker
+    # SDK retries for 429 / 5xx / connection errors, with exponential backoff (and `retry-after`
+    # when the provider sends it). None: the client's default (3 OpenAI-compatible, 4 Anthropic).
+    # Raise it for providers with tight per-minute quotas: about 12 retries span a minute window.
+    max_retries: int | None = None
 
 
 @dataclass
@@ -145,7 +149,8 @@ class OpenAICompatClient:
         self.cfg, self.cache, self.budget = cfg, cache, budget
         self.name = cfg.name
         self._dedup = InflightDedup()
-        kwargs: dict = {"base_url": cfg.base_url, "api_key": key, "max_retries": 3, "timeout": 120}
+        kwargs: dict = {"base_url": cfg.base_url, "api_key": key, "timeout": 120,
+                        "max_retries": 3 if cfg.max_retries is None else cfg.max_retries}
         if (cafile := os.environ.get("SSL_CERT_FILE")):
             import ssl
 

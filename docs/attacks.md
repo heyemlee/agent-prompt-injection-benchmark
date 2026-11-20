@@ -197,10 +197,11 @@ Generated payloads exist only in the run directory. `runs/` is git-ignored: neve
 ```bash
 uv run injbench adaptive configs/adaptive_smoke.toml --dry-run   # offline plumbing check, $0
 uv run injbench adaptive configs/adaptive_smoke.toml
-uv run injbench adaptive configs/adaptive_qwen.toml --dry-run    # the real experiment: check the plan
-uv run injbench adaptive configs/adaptive_qwen.toml              # needs SILICONFLOW_API_KEY, ANTHROPIC_API_KEY
-uv run injbench adaptive configs/adaptive_qwen.toml --observation outcome      # ablation, same cases
-uv run injbench adaptive configs/adaptive_qwen.toml --observation transcript
+uv run injbench adaptive configs/adaptive_attacker_check.toml    # gate G2: attacker refusals, cost per turn
+uv run injbench adaptive configs/adaptive_qwen_local.toml --dry-run   # the main comparison: check the plan
+uv run injbench adaptive configs/adaptive_qwen_local.toml        # needs LOCAL_QWEN_BASE_URL, ANTHROPIC_API_KEY
+uv run injbench adaptive configs/adaptive_qwen_local.toml --observation outcome      # ablation, same cases
+uv run injbench adaptive configs/adaptive_qwen_local.toml --observation transcript
 uv run injbench adaptive --report runs/<run dir>                 # recompute comparison.md
 ```
 
@@ -221,7 +222,12 @@ uv run injbench adaptive --report runs/<run dir>                 # recompute com
 |---|---|---|
 | `configs/attempts_smoke.toml` | main runner, scripted agents, 3 paraphrase attempts, ASR@k table | $0 |
 | `configs/adaptive_smoke.toml` | comparison with scripted targets and the scripted attacker; checks the plumbing (the arms come out equal) | $0 |
-| `configs/adaptive_qwen.toml` | Qwen3.5-9B on SiliconFlow (the smoke-run target that static attacks move) vs a Claude Sonnet 5.5 attacker, K = 5, both defenses, `actions` level | estimate: under $1 Qwen + $2–5 attacker; cap $8 |
+| `configs/adaptive_attacker_check.toml` | gate G2: 4 within-permission cases (`info_block`, `permissions`), adaptive arm, up to 10 attempts against the local Qwen. Checks that the attacker writes payloads, and measures the cost of one attacker turn | attacker only; cap $5 |
+| `configs/adaptive_qwen_local.toml` | the main comparison: local Qwen3.5-9B under `permissions`; 21 templates × `info_block` × the 9 within-permission goals = 38 cases; both arms; K = 10 | attacker only; cap $25 |
+| `configs/adaptive_qwen_local_datamark.toml` | the same 38 cases, adaptive arm, `permissions` vs `permissions+spotlight_datamark`; runs if gate G3 passes (PLAN §8.4) | attacker only; cap $25 |
+| `configs/adaptive_qwen_local_modernbert.toml` | the 5 detector test templates × 4 families × the within-permission goals = 28 cases per defense; adaptive arm; `permissions` vs `permissions+modernbert`; gate G3 | attacker only; cap $30 |
+| `configs/adaptive_frontier.toml` | Claude Sonnet 5.5 target under `permissions`: 21 templates × {`info_block`, `business_note`} × 9 within-permission goals = 76 cases, K = 20. Its repeated arm runs only if the attacker succeeds (gate G4) | attacker and target; cap $100, a placeholder until G2 measures the cost per turn |
+| `configs/adaptive_qwen.toml` | the earlier plan: Qwen3.5-9B on SiliconFlow, K = 5, `none` and `permissions` | not planned: SiliconFlow spending is capped at $2 |
 
 ## Decisions
 
@@ -262,8 +268,10 @@ uv run injbench adaptive --report runs/<run dir>                 # recompute com
 
 ## Open questions
 
-- **Attacker choice for the paid run.** `adaptive_qwen.toml` uses Claude Sonnet 5.5. A Claude
-  attacker may refuse some turns (they are recorded), and an open model would avoid that.
+- **Attacker choice for the paid runs.** Every adaptive config uses Claude Sonnet 5.5. A Claude
+  attacker may refuse some turns; refusals are recorded, and an open model would avoid them.
+  Gate G2 measures the refusal rate. Above 10%, switch the attacker in every adaptive config to
+  the OpenAI flagship.
 - **Combining sources.** For models that accept temperature, should `paraphrase` be combined with
   temperature sampling as a third source?
 - **More knowledge at `actions`.** Should the attacker get the user's request at the `actions`

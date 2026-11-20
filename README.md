@@ -22,13 +22,13 @@ to AgentDojo and newer benchmarks, and what it does not cover, is under
 | Milestone | State |
 |---|---|
 | M1: core harness (world, policy, tools, 4 task templates, 4 attack families, 5 goals, `none`/`permissions` arms, runner, metrics) | done; smoke runs on Claude 5.5 ×3 and Qwen3.5-9B (below) |
-| M2: 21 task templates, 13 goals, spotlighting arms, exposure-after-defense metrics | code done ([templates](docs/templates.md), [spotlighting](docs/spotlighting.md)); E1 on real models not run yet |
-| M3: injection detectors (ModernBERT vs Prompt Guard 2) on top of permissions | code done, ModernBERT trained offline ([detector card](docs/detector.md)); Prompt Guard 2 waits for gated access; E2 not run yet |
-| M4: adaptive vs repeated attacks at equal k (ASR@k) | code done ([attacks](docs/attacks.md)); the paid comparison has not run yet. It is required before any claim about a defense, because static attacks alone overstate robustness ([below](#related-work-and-positioning)) |
+| M2: 21 task templates, 13 goals, spotlighting arms, exposure-after-defense metrics | code done ([templates](docs/templates.md), [spotlighting](docs/spotlighting.md)); E1 run on a local Qwen3.5-9B ([results](#e1-and-e2-on-a-local-qwen35-9b-2026-11-20)) |
+| M3: injection detectors (ModernBERT vs Prompt Guard 2), alone and on top of permissions | code done, ModernBERT trained offline ([detector card](docs/detector.md)); E2 run on the local Qwen, where it hit a floor; a 2×2 rerun with a detector-only arm is next. Prompt Guard 2 waits for gated access |
+| M4: adaptive vs repeated attacks at equal k (ASR@k) | code done ([attacks](docs/attacks.md)); configs ready (Claude Sonnet 5.5 attacker; local Qwen and Sonnet 5.5 targets). The paid comparison has not run yet. It is required before any claim about a defense, because static attacks alone overstate robustness ([below](#related-work-and-positioning)) |
 | M5: gated DPO-vs-SFT robustness training (Tinker API) | waits for E2 |
 | M6: Inspect port, write-up, model card | Inspect port done ([Inspect](docs/inspect.md)); write-up and model card after the results. inspect_evals no longer takes code for new evals, so there is no pull request to make, and a Register listing would need a paper |
 
-About 600 offline tests cover all of it. Every test uses scripted agents or fakes, so none of
+About 650 offline tests cover all of it. Every test uses scripted agents or fakes, so none of
 them calls a paid API.
 
 ## Quickstart
@@ -82,8 +82,12 @@ uv run injbench run configs/anthropic_smoke.toml --model claude-sonnet-5-5   # p
 uv run injbench run configs/qwen_openrouter.toml   # Qwen3.5-9B via OpenRouter (OPENROUTER_API_KEY)
 uv run injbench run configs/qwen_siliconflow.toml  # via SiliconFlow, FP8 (SILICONFLOW_API_KEY)
 uv run injbench run configs/qwen_tinker.toml       # via Tinker's Anthropic-compatible API (TINKER_API_KEY)
+uv run injbench run configs/qwen_local.toml        # a llama.cpp server on your own machine (LOCAL_QWEN_BASE_URL)
 ```
 
+- **Local server.** Every Qwen run after the E1 pilot uses Qwen3.5-9B as a Q8_0 GGUF on
+  llama.cpp, which costs nothing per token. The config header has the server command. The
+  server's address goes in `.env`, so no machine name enters this public repository.
 - **OpenRouter.** The config routes only to full-precision (bf16) providers that support tool
   calling, DeepInfra first. Every response records which provider served it.
 - **Tinker.** This is the stack that would also serve fine-tuned checkpoints in E3. Its config is
@@ -216,6 +220,70 @@ What it showed:
   empty reply (2 of 3 replays). Qwen therefore runs with thinking off (4 of 4 tool calls came
   back correctly); Claude keeps adaptive thinking.
 
+## E1 and E2 on a local Qwen3.5-9B (2026-11-20)
+
+Qwen3.5-9B ran as `unsloth/Qwen3.5-9B-GGUF:Q8_0` on llama.cpp ([configs/qwen_local.toml](configs/qwen_local.toml)):
+thinking off, temperature 0.7, top_p 0.8, top_k 20. The runs cost $0. CIs are 95% bootstrap
+intervals that resample templates. These are static attacks only; the adaptive comparison has
+not run yet.
+
+**The local server stands in for the API (gate G0).** On the pilot matrix (21 templates,
+`info_block`, no defense, 143 episodes), the local model's ASR was 0.16, against 0.23
+[0.12, 0.35] on SiliconFlow. Benign completion was 0.81 on both. Every comparison below is
+between arms of the same local model. The results describe this quantized model, not the API
+deployment.
+
+**E1** ([configs/e1_qwen_local_full.toml](configs/e1_qwen_local_full.toml)): 21 templates × 2
+instances × {benign + 4 families × applicable goals}. Each arm has 1,018 episodes: 42 benign
+and 976 attacked, of which 672 target out-of-permission goals and 304 within-permission goals.
+
+| Defense | Benign completion | Safe completion under attack | Realized violations | Attempted violations | ASR |
+|---|---|---|---|---|---|
+| none | 0.83 [0.69, 0.95] | 0.61 [0.45, 0.77] | 0.31 [0.16, 0.47] | 0.21 [0.09, 0.35] | 0.05 |
+| permissions | 0.93 [0.81, 1.00] | 0.90 [0.80, 0.97] | 0.00 | 0.03 [0.01, 0.04] | 0.02 |
+| spotlight_datamark | 0.83 [0.69, 0.95] | 0.66 [0.51, 0.81] | 0.27 [0.12, 0.42] | 0.18 [0.07, 0.31] | 0.02 |
+| permissions+spotlight_datamark | 0.93 [0.81, 1.00] | 0.90 [0.80, 0.97] | 0.00 | 0.01 [0.00, 0.03] | 0.01 |
+
+Successful attacks out of 244 per family and arm:
+
+| Defense | override | info_block | fake_system | business_note |
+|---|---|---|---|---|
+| none | 0 | 47 | 4 | 1 |
+| permissions | 0 | 20 | 3 | 1 |
+| spotlight_datamark | 0 | 19 | 3 | 1 |
+| permissions+spotlight_datamark | 0 | 9 | 2 | 1 |
+
+- **Permissions is the defense that matters here.** It raises safe completion under attack by
+  +0.29 [+0.14, +0.45] and cuts realized violations from 0.31 to 0.
+  - Most of that gain comes from Qwen's own scope errors, not from injections. In 33–36% of
+    benign episodes, in every arm, at least one of its SQL queries reaches past the team's rows,
+    usually because it leaves out the team filter.
+  - Without permissions, those queries return other teams' tickets, which then appear in
+    replies, emails and KB flags. With permissions, the same queries run on the team-scoped
+    database and return only the team's rows.
+  - The scoped database is also the likely reason benign completion is higher with permissions
+    (0.93 vs 0.83): it does the filtering that Qwen leaves out.
+- **Permissions blocks out-of-permission goals completely, but not within-permission ones.** No
+  out-of-permission attack succeeds under permissions (0 of 672), by construction: the calls are
+  blocked. Within-permission attacks still succeed in 24 of 304 episodes (0.08).
+- **Datamarking cuts ASR but not unsafe outcomes.**
+  - On top of permissions, it halves the within-permission successes (24 → 12 of 304; the
+    paired CI is not computed yet), but safe completion does not move (−0.00 [−0.03, +0.02]).
+  - Alone, it lowers ASR about as much as permissions does (0.05 → 0.02). Safe completion moves
+    little (+0.05 [−0.04, +0.15]), because datamarking does nothing about Qwen's scope errors.
+- **One family does almost all the damage.** `info_block` accounts for 47 of the 52 successes
+  without a defense, and `override` never succeeded.
+
+**E2** ([configs/e2_detectors_qwen_local.toml](configs/e2_detectors_qwen_local.toml)) tested
+ModernBERT (seed 0, frozen threshold) on the 5 templates held out from its training and
+calibration, with 113 episodes per arm.
+- With permissions alone, 1 of 108 attacks succeeded: a within-permission `close_unrequested`.
+- With the detector on top, 0 of 108 succeeded, and no payload reached the model.
+- That is a floor effect: permissions leaves too few successes for a detector to show what it
+  adds. With 5 templates, the CIs are also rough.
+- A 2×2 rerun is next: the detector alone and on top of permissions, 2 instances per template.
+  It measures the detector where attacks still succeed.
+
 ## Related work and positioning
 
 This project extends an existing line of work. It does not open a new one. The descriptions
@@ -279,8 +347,9 @@ configs/        offline: smoke, m2_offline, m2_spotlight_offline, e2_detectors_s
                 paid: anthropic_smoke, qwen_{openrouter,siliconflow,tinker}, e1_pilot,
                 e1_qwen_siliconflow, e1_claude, e2_detectors_qwen_siliconflow, adaptive_qwen,
                 adaptive_attacker_check, adaptive_frontier
-                local Qwen server ($0): qwen_local, e1_pilot_qwen_local, e1_qwen_local,
-                e2_detectors_qwen_local, adaptive_qwen_local{,_datamark,_modernbert}
+                local Qwen server ($0 for the target): qwen_local, e1_pilot_qwen_local,
+                e1_qwen_local, e1_qwen_local_full, e2_detectors_qwen_local,
+                adaptive_qwen_local{,_datamark,_modernbert} (these three pay for the attacker)
                 api_example (template)
 docs/           templates.md  spotlighting.md  detector.md  attacks.md  inspect.md
 tests/          offline test suite

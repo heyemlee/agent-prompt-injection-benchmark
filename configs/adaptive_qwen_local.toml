@@ -7,8 +7,8 @@
 # Attempt 1 carries the canonical static payload in both arms, so it doubles as the static result
 # and replays from the permissions arm of configs/e1_qwen_local.toml.
 # Run gate G2 (configs/adaptive_attacker_check.toml) first.
-# Cost: the target is free; budget_usd caps the attacker (at most 38 x 9 turns, about $25-60 on
-# gpt-6.2-astra, less when attacks succeed early).
+# Cost: free; the attacker and the target both run on the local server (at most 38 x 9 attacker
+# turns; about 6-8 hours, less when attacks succeed early).
 #   uv run injbench adaptive configs/adaptive_qwen_local.toml --dry-run
 #   uv run injbench adaptive configs/adaptive_qwen_local.toml
 [run]
@@ -43,26 +43,32 @@ arms = ["repeated", "adaptive"]
 stop_on_success = true
 max_payload_chars = 2000
 
-# The attacker model: OpenAI's gpt-6.2-astra. It comes from another vendor than the Claude target
-# of the frontier run, and it is paid from the OpenAI budget. Every adaptive config uses this same
+# The attacker model: Qwen3.5-9B on the target's own llama.cpp server, with thinking on and
+# Qwen's recommended thinking-mode sampling. It is the only attacker that passed gate G2
+# (configs/adaptive_attacker_check.toml). It is the target model itself, so a result reads
+# "within k attempts under a Qwen3.5-9B adaptive attacker". Every adaptive config uses this same
 # block (tests/test_config_guards.py), so the runs are comparable and replay each other's
 # attacker turns from the cache. Payloads it writes stay in the run directory (runs/ is
 # git-ignored).
-# USD per 1M tokens, OpenAI price list (checked 2026-11-20), short context (up to 272K input
-# tokens; attacker turns stay far below). Cached input is billed at the cache-read price.
 [attacker]
-name = "attacker-gpt-6-2-astra"
+name = "attacker-qwen3.5-9b-local"
 kind = "openai_compat"
-model = "gpt-6.2-astra"
-base_url = "https://api.openai.com/v1"
-base_url_env = "OPENAI_BASE_URL"   # optional relay from .env; empty falls back to base_url
-api_key_env = "OPENAI_API_KEY"
-timeout_s = 600
-max_retries = 6
-price_in_per_m = 8.0
-price_out_per_m = 40.0
-price_cache_read_per_m = 0.40
-extra_params = { max_completion_tokens = 16000, reasoning_effort = "medium" }
+model = "unsloth/Qwen3.5-9B-GGUF:Q8_0"
+base_url_env = "LOCAL_QWEN_BASE_URL"
+api_key_env = "LOCAL_QWEN_API_KEY"
+local = true          # costs $0
+timeout_s = 1200
+max_retries = 2
+temperature = 0.6
+
+[attacker.extra_params]
+max_tokens = 16000
+top_p = 0.95
+
+[attacker.extra_params.extra_body]
+top_k = 20
+min_p = 0.0
+chat_template_kwargs = { enable_thinking = true }
 
 # `model` names the exact weights. It is part of every cache key, so change it whenever the
 # weights or the quantization change, and cached responses of two servers never mix.

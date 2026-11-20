@@ -370,12 +370,13 @@ Two rules follow.
   one success within k attempts under a K-round adaptive attacker". No arm is called robust or
   secure.
 
-The five configs below all use one attacker, OpenAI's gpt-6.2-astra ($8 / $40 per 1M tokens,
-cached input $0.40). It comes from another vendor than the Claude frontier target, and it is
-paid from the OpenAI budget. A test keeps the five attacker blocks identical, so the runs are
-comparable and replay each other's attacker turns. The matrix and the budget cap of each run
-are in its config header. If G2 fails, all five switch back to Claude Sonnet 5.5 (the block is
-in the G2 config's header).
+The five configs below all use one attacker: Qwen3.5-9B on the target's own llama.cpp server,
+with thinking on. It is the only attacker that passed G2 on 2026-11-20 (gpt-6.2-astra declined
+every turn, Claude Sonnet 5.5 was stopped by the API's cyber safeguards, GLM-4.7-flash did not
+fit in GPU memory next to the target; details in the G2 config's header). It is the target
+model itself, so results are worded "under a Qwen3.5-9B adaptive attacker". A test keeps the
+five attacker blocks identical, so the runs are comparable and replay each other's attacker
+turns. The matrix of each run is in its config header.
 - `configs/adaptive_attacker_check.toml` runs first, on 4 cases. It checks that the attacker
   writes payloads instead of refusing, and it measures what one attacker turn costs.
 - `configs/adaptive_qwen_local.toml` is the comparison on the local Qwen3.5-9B under
@@ -530,11 +531,10 @@ production models. All data is synthetic, and no employer code, data or benchmar
     attacker raises.
   - Options: skip both runs, or run them as exploratory and report them as runs whose gate
     failed. The caps are $60 and $80 for the attacker.
-- **Attacker model for the adaptive run.** Since 2026-11-20 it is OpenAI's gpt-6.2-astra. Any
-  attacker may refuse some rounds, which would understate adaptive attacks. G2 checks the refusal
-  rate (`attacker_stats.errors` in the run manifest). It is also the first run of this model
-  through the OpenAI-compatible client. The cheaper gpt-6.2-sol ($2 / $10) would cut the attacker
-  cost by about 4×, but it is a weaker attacker.
+- **Attacker model for the adaptive run.** Since 2026-11-20 it is Qwen3.5-9B on the local
+  server, the only attacker that passed G2. It is weak next to a frontier attacker. A stronger
+  hosted attacker needs either a model that does not refuse the task or Anthropic's Cyber
+  Verification Program for Claude Sonnet 5.5.
 - **Adaptive budget.** The configs now set K = 10 on the local Qwen and K = 20 on the frontier
   target, up from 5 (§8.4). Both are still small next to published budgets. Confirm them before
   the paid runs: the attacker's cost grows at least linearly with K.

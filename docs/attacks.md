@@ -268,11 +268,11 @@ uv run injbench adaptive --report runs/<run dir>                 # recompute com
 
 ## Open questions
 
-- **Attacker choice for the paid runs.** Every adaptive config uses OpenAI's gpt-6.2-astra. It
-  comes from another vendor than the Claude frontier target, and it is paid from the OpenAI
-  budget. Any LLM attacker may refuse some turns; refusals are recorded, and an open model
-  would avoid them. Gate G2 measures the refusal rate. Above 10%, switch the attacker in every
-  adaptive config to Claude Sonnet 5.5 (the block is in the G2 config's header).
+- **Attacker choice.** Every adaptive config uses Qwen3.5-9B on the local llama.cpp server, the
+  only attacker that passed gate G2 (gpt-6.2-astra declined every turn; Claude Sonnet 5.5 was
+  stopped by the API's cyber safeguards). It is the target model itself and a weak attacker.
+  A stronger one would need a hosted model that accepts the task, or Anthropic's Cyber
+  Verification Program for Claude Sonnet 5.5.
 - **Combining sources.** For models that accept temperature, should `paraphrase` be combined with
   temperature sampling as a third source?
 - **More knowledge at `actions`.** Should the attacker get the user's request at the `actions`

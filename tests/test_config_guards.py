@@ -75,5 +75,5 @@ def test_paid_adaptive_configs_share_one_attacker():
     reference = attackers["adaptive_qwen_local.toml"]
     for name, a in attackers.items():
         assert a == reference, name
-    assert reference["price_in_per_m"] and reference["price_out_per_m"]
-    assert reference["price_cache_read_per_m"]  # OpenAI caches prompts; bill them as cached
+    if not reference.get("local"):  # a hosted attacker must be priced; a local one costs nothing
+        assert reference["price_in_per_m"] and reference["price_out_per_m"]

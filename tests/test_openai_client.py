@@ -101,6 +101,30 @@ def test_truncated_and_filtered_turns(client):
     assert r.message["refusal"] == {"type": "content_filter"}
 
 
+def test_cached_input_is_billed_at_the_cache_read_price(tmp_path, monkeypatch):
+    """OpenAI reports cached prompt tokens in prompt_tokens_details; they cost the cache-read
+    price when one is configured, and the full input price when none is."""
+    monkeypatch.setenv("FAKE_OR_KEY", "x")
+
+    class Cached(FakeCompletions):
+        async def create(self, **params):
+            resp = await super().create(**params)
+            resp.usage.prompt_tokens_details = SimpleNamespace(cached_tokens=800)
+            return resp
+
+    for read, expected in ((0.40, (200 * 8.0 + 800 * 0.40 + 100 * 40.0) / 1e6),
+                           (None, (1000 * 8.0 + 100 * 40.0) / 1e6)):
+        cfg = ModelConfig(name="a", model="gpt-x", api_key_env="FAKE_OR_KEY", price_in_per_m=8.0,
+                          price_out_per_m=40.0, price_cache_read_per_m=read)
+        c = OpenAICompatClient(cfg, ResponseCache(tmp_path / f"{read}.sqlite"), Budget(1.0))
+        c.client = SimpleNamespace(chat=SimpleNamespace(completions=Cached()))
+        r = asyncio.run(c.complete([{"role": "user", "content": "a"}], []))
+        assert (r.input_tokens, r.cache_read_tokens, r.output_tokens) == (200, 800, 100)
+        assert r.cost_usd == pytest.approx(expected)
+        replay = asyncio.run(c.complete([{"role": "user", "content": "a"}], []))
+        assert replay.cached and replay.cache_read_tokens == 800
+
+
 def test_qwen_configs_parse():
     cfg = load_config(CONFIGS / "qwen_openrouter.toml")
     m = cfg.models[0]

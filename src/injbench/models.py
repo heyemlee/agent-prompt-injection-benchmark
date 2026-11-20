@@ -186,10 +186,12 @@ class OpenAICompatClient:
         key = request_key(params, attempt)
         if self.cache is not None and (hit := self.cache.get(key)) is not None:
             return ModelResponse(hit["message"], hit["input_tokens"], hit["output_tokens"], True,
+                                 cache_read_tokens=hit.get("cache_read_tokens", 0),
                                  cost_usd=hit.get("cost_usd", 0.0))
         record, shared = await self._dedup.run(key, lambda: self._fetch(params, key))
         return ModelResponse(record["message"], record["input_tokens"], record["output_tokens"],
-                             shared, cost_usd=record["cost_usd"])
+                             shared, cache_read_tokens=record.get("cache_read_tokens", 0),
+                             cost_usd=record["cost_usd"])
 
     async def _fetch(self, params: dict, key: str) -> dict:
         self.budget.check()
@@ -217,11 +219,21 @@ class OpenAICompatClient:
         if provider:
             message["provider"] = provider
         usage = getattr(resp, "usage", None)
-        tin = getattr(usage, "prompt_tokens", 0) or 0
+        prompt = getattr(usage, "prompt_tokens", 0) or 0
+        # Providers that cache prompts (OpenAI does automatically) report the cached part here.
+        details = getattr(usage, "prompt_tokens_details", None)
+        cached_in = min(getattr(details, "cached_tokens", 0) or 0, prompt)
+        tin = prompt - cached_in  # uncached input, as ModelResponse.input_tokens counts it
         tout = getattr(usage, "completion_tokens", 0) or 0
-        cost = tin / 1e6 * self.cfg.price_in_per_m + tout / 1e6 * self.cfg.price_out_per_m
+        # Without a configured cache-read price the discount is unknown: bill cached input in full.
+        read = self.cfg.price_cache_read_per_m
+        if read is None:
+            read = self.cfg.price_in_per_m
+        cost = (tin / 1e6 * self.cfg.price_in_per_m + cached_in / 1e6 * read
+                + tout / 1e6 * self.cfg.price_out_per_m)
         self.budget.charge(cost)
-        record = {"message": message, "input_tokens": tin, "output_tokens": tout, "cost_usd": cost}
+        record = {"message": message, "input_tokens": tin, "output_tokens": tout, "cost_usd": cost,
+                  "cache_read_tokens": cached_in}
         if self.cache is not None:
             self.cache.put(key, record)
         return record

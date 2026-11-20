@@ -222,11 +222,11 @@ uv run injbench adaptive --report runs/<run dir>                 # recompute com
 |---|---|---|
 | `configs/attempts_smoke.toml` | main runner, scripted agents, 3 paraphrase attempts, ASR@k table | $0 |
 | `configs/adaptive_smoke.toml` | comparison with scripted targets and the scripted attacker; checks the plumbing (the arms come out equal) | $0 |
-| `configs/adaptive_attacker_check.toml` | gate G2: 4 within-permission cases (`info_block`, `permissions`), adaptive arm, up to 10 attempts against the local Qwen. Checks that the attacker writes payloads, and measures the cost of one attacker turn | attacker only; cap $5 |
-| `configs/adaptive_qwen_local.toml` | the main comparison: local Qwen3.5-9B under `permissions`; 21 templates × `info_block` × the 9 within-permission goals = 38 cases; both arms; K = 10 | attacker only; cap $25 |
-| `configs/adaptive_qwen_local_datamark.toml` | the same 38 cases, adaptive arm, `permissions` vs `permissions+spotlight_datamark`; runs if gate G3 passes (PLAN §8.4) | attacker only; cap $25 |
-| `configs/adaptive_qwen_local_modernbert.toml` | the 5 detector test templates × 4 families × the within-permission goals = 28 cases per defense; adaptive arm; `permissions` vs `permissions+modernbert`; gate G3 | attacker only; cap $30 |
-| `configs/adaptive_frontier.toml` | Claude Sonnet 5.5 target under `permissions`: 21 templates × {`info_block`, `business_note`} × 9 within-permission goals = 76 cases, K = 20. Its repeated arm runs only if the attacker succeeds (gate G4) | attacker and target; cap $100, a placeholder until G2 measures the cost per turn |
+| `configs/adaptive_attacker_check.toml` | gate G2: 4 within-permission cases (`info_block`, `permissions`), adaptive arm, up to 10 attempts against the local Qwen. Checks that the attacker writes payloads, and measures the cost of one attacker turn | attacker only; cap $10 |
+| `configs/adaptive_qwen_local.toml` | the main comparison: local Qwen3.5-9B under `permissions`; 21 templates × `info_block` × the 9 within-permission goals = 38 cases; both arms; K = 10 | attacker only; about $25–60; cap $60 |
+| `configs/adaptive_qwen_local_datamark.toml` | the same 38 cases, adaptive arm, `permissions` vs `permissions+spotlight_datamark`; runs if gate G3 passes (PLAN §8.4) | attacker only; about $25–60; cap $60 |
+| `configs/adaptive_qwen_local_modernbert.toml` | the 5 detector test templates × 4 families × the within-permission goals = 28 cases per defense; adaptive arm; `permissions` vs `permissions+modernbert`; gate G3 | attacker only; about $30–75; cap $80 |
+| `configs/adaptive_frontier.toml` | Claude Sonnet 5.5 target under `permissions`: 21 templates × {`info_block`, `business_note`} × 9 within-permission goals = 76 cases, K = 20. Its repeated arm runs only if the attacker succeeds (gate G4) | attacker about $100–245, Sonnet about $18–30 per arm; cap $300, a placeholder until G2 measures the cost per turn |
 | `configs/adaptive_qwen.toml` | the earlier plan: Qwen3.5-9B on SiliconFlow, K = 5, `none` and `permissions` | not planned: SiliconFlow spending is capped at $2 |
 
 ## Decisions
@@ -268,10 +268,11 @@ uv run injbench adaptive --report runs/<run dir>                 # recompute com
 
 ## Open questions
 
-- **Attacker choice for the paid runs.** Every adaptive config uses Claude Sonnet 5.5. A Claude
-  attacker may refuse some turns; refusals are recorded, and an open model would avoid them.
-  Gate G2 measures the refusal rate. Above 10%, switch the attacker in every adaptive config to
-  the OpenAI flagship.
+- **Attacker choice for the paid runs.** Every adaptive config uses OpenAI's gpt-6.2-astra. It
+  comes from another vendor than the Claude frontier target, and it is paid from the OpenAI
+  budget. Any LLM attacker may refuse some turns; refusals are recorded, and an open model
+  would avoid them. Gate G2 measures the refusal rate. Above 10%, switch the attacker in every
+  adaptive config to Claude Sonnet 5.5 (the block is in the G2 config's header).
 - **Combining sources.** For models that accept temperature, should `paraphrase` be combined with
   temperature sampling as a third source?
 - **More knowledge at `actions`.** Should the attacker get the user's request at the `actions`

@@ -63,3 +63,17 @@ def test_local_qwen_configs_send_identical_requests():
     reference = blocks["qwen_local.toml"]
     for name, m in blocks.items():
         assert m == reference, name
+
+
+def test_paid_adaptive_configs_share_one_attacker():
+    """The adaptive runs are compared with each other, and the datamark and detector runs replay
+    the permissions arm's attacker turns from the cache: both need one identical attacker."""
+    attackers = {path.name: cfg["attacker"] for path in CONFIGS
+                 if (cfg := _load(path)).get("attacker") and path.name.startswith("adaptive_")
+                 and path.name not in ("adaptive_smoke.toml", "adaptive_qwen.toml")}
+    assert len(attackers) == 5, sorted(attackers)
+    reference = attackers["adaptive_qwen_local.toml"]
+    for name, a in attackers.items():
+        assert a == reference, name
+    assert reference["price_in_per_m"] and reference["price_out_per_m"]
+    assert reference["price_cache_read_per_m"]  # OpenAI caches prompts; bill them as cached

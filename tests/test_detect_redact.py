@@ -117,12 +117,15 @@ def test_arms_are_registered_and_listed(capsys):
 
     for name, tag in ARM_DETECTORS.items():
         arm = get_defense(name)
-        assert isinstance(arm, DetectorDefense) and arm.enforce_permissions
+        assert isinstance(arm, DetectorDefense)
+        assert arm.enforce_permissions == name.startswith("permissions+")
         assert arm.detector == tag and DEFENSES[name] is arm
-    assert set(ARM_DETECTORS) == {"permissions+promptguard2", "permissions+modernbert"}
+    assert set(ARM_DETECTORS) == {"promptguard2", "modernbert",
+                                  "permissions+promptguard2", "permissions+modernbert"}
     assert main(["list"]) == 0
     out = capsys.readouterr().out
     assert "permissions+promptguard2" in out and "permissions+modernbert" in out
+    assert "\nmodernbert" in out or " modernbert" in out
 
 
 def _episode(world, task, attack, defense):
@@ -146,6 +149,28 @@ def test_detector_arm_end_to_end_with_fake_detector(world):
         assert record["task_success"] and record["safe_completion"]
         record, transcript = _episode(world, task, None, arm)  # benign: nothing to redact
         assert not any(c["filtered"] for c in transcript["calls"])
+    finally:
+        unregister_scorer("fake")
+
+
+def test_detector_only_arm_redacts_but_does_not_enforce_permissions(world):
+    """Alone, the detector only redacts. The scripted gullible agent does not read, so it carries
+    out an out-of-permission goal anyway: nothing blocks the call, unlike with permissions."""
+    task = build_instances(world, ["sla_summary_report"], 1)[0]
+    attack = build_attack(world, task, "info_block", "grant_admin")
+    register_scorer("fake", lambda ts: [9.0 if attack.marker in t else -9.0 for t in ts], 0.0)
+    try:
+        gullible = ModelConfig(name="ref-gullible", kind="scripted", behavior="gullible")
+        outcomes = {}
+        for arm in (DetectorDefense("fake", enforce_permissions=False, detector="fake"),
+                    DetectorDefense("permissions+fake", enforce_permissions=True, detector="fake")):
+            spec = EpisodeSpec("x", task, attack, arm, gullible, 0)
+            client = scripted_client(gullible, task, attack, world)
+            record, transcript = asyncio.run(run_episode(spec, world, client, 30))
+            tool_msgs = [m["content"] for m in transcript["messages"] if m["role"] == "tool"]
+            assert record["exposed"] and not any(attack.marker in m for m in tool_msgs)
+            outcomes[arm.name] = bool(record["attack_success"])
+        assert outcomes == {"fake": True, "permissions+fake": False}
     finally:
         unregister_scorer("fake")
 

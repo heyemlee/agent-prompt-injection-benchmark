@@ -1,8 +1,9 @@
 # M3: injection detectors (detector card)
 
-This branch adds the detector arms for E2 (PLAN §8.2): least-privilege permissions plus an
-injection detector that redacts flagged tool-output segments. Two arms are registered:
-`permissions+promptguard2` and `permissions+modernbert`. This page covers the dataset, the
+This branch adds the detector arms for E2 (PLAN §8.2): an injection detector that redacts
+flagged tool-output segments, on top of least-privilege permissions. Two arms are registered:
+`permissions+promptguard2` and `permissions+modernbert`. Since 2026-11-20 each detector also
+runs alone (`promptguard2`, `modernbert`), without permissions. This page covers the dataset, the
 splits, training, calibration, latency, preliminary offline results and how to run everything.
 
 **Status (2026-11-19).**
@@ -148,6 +149,12 @@ these commands exit with code 3 and a message that explains how to get it.
 `uv run --extra detect injbench run configs/e2_detectors_qwen_local.toml`. It scores only the
 detector's test templates; `tests/test_config_guards.py` fails any config whose detector arms
 reach a train or val template. The offline plumbing check is `configs/e2_detectors_scripted.toml`.
+
+The first E2 run (2026-11-19: instance 0, `permissions` vs `permissions+modernbert`) hit a floor.
+Permissions alone let 1 of 108 attacks through, and the stacked arm let none through, so the run
+could not show what the detector adds. The config is now a 2×2: `none`, `modernbert`,
+`permissions` and `permissions+modernbert`, at 2 instances per template. The detector-only arm
+measures the detector where attacks still succeed. Results are in the README.
 
 **Settings.**
 
@@ -545,10 +552,10 @@ src/injbench/detect/
   train.py           ModernBERT fine-tune
   evaluate.py        calibration, test metrics, error analysis, end-to-end proxy
   latency.py         latency benchmarks, hardware info
-  arms.py            the two defense arms
+  arms.py            the detector arms, alone and on top of permissions
   cli.py             injbench-detect
 configs/e2_detectors_scripted.toml          offline check of the arm inside `injbench run`
-configs/e2_detectors_qwen_local.toml        the E2 run, on a local Qwen server
+configs/e2_detectors_qwen_local.toml        the E2 2×2, on a local Qwen server
 configs/e2_detectors_qwen_siliconflow.toml  the same matrix on SiliconFlow (not planned: $2 cap)
 tests/test_detect_*.py                      offline; the torch-backed tests skip without the extra
 ```

@@ -228,19 +228,23 @@ def cmd_check(args) -> int:
     from .arms import DETECTOR_ARMS
     from .detectors import DetectorUnavailable, calibration_path, load_calibrated
 
-    ok = True
+    # A detector serves two arms (alone and on top of permissions); check and load it once.
+    arms_by_tag: dict[str, list[str]] = {}
     for name, arm in DETECTOR_ARMS.items():
-        path = calibration_path(arm.detector, args.root)
+        arms_by_tag.setdefault(arm.detector, []).append(name)
+    ok = True
+    for tag, names in arms_by_tag.items():
+        path = calibration_path(tag, args.root)
         status = "calibrated" if path.exists() else "NOT calibrated"
         if path.exists() and args.load:
             try:
-                det, cal = load_calibrated(arm.detector, args.root, args.device)
+                det, cal = load_calibrated(tag, args.root, args.device)
                 status += f", weights load on {det.device}"
             except DetectorUnavailable as e:
                 status += f", weights NOT loadable: {e}"
                 ok = False
         ok &= path.exists()
-        print(f"{name:28s} {status} ({path})")
+        print(f"{tag:14s} {status} ({path}); arms: {', '.join(names)}")
     return 0 if ok else EXIT_UNAVAILABLE
 
 

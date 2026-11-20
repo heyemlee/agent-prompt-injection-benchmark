@@ -15,7 +15,7 @@ Layout:
   train.py           ModernBERT fine-tune
   evaluate.py        offline evaluation, error analysis, end-to-end proxy with scripted agents
   latency.py         p50/p95 latency per call
-  arms.py            `permissions+promptguard2` and `permissions+modernbert`
+  arms.py            `modernbert`, `promptguard2`, and each on top of `permissions`
   cli.py             `injbench-detect`
 """
 

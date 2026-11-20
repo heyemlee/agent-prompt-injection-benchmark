@@ -1,4 +1,9 @@
-"""Detector defense arms: least-privilege permissions plus an injection detector.
+"""Detector defense arms: an injection detector alone, and on top of least-privilege permissions.
+
+The stacked arm (`permissions+modernbert`) measures what a detector adds to permissions. Under
+static attacks that can be nothing measurable: permissions already blocks every out-of-permission
+goal, so few successes are left to stop. The detector-only arm (`modernbert`) measures the
+detector where attacks still succeed.
 
 Each arm's output filter scans every segment of every executed read tool's result and replaces
 each flagged segment with one fixed notice (`redact.REDACTION_NOTICE`). The on-detect action is
@@ -21,6 +26,8 @@ from .redact import FilterStats, SegmentScorer, make_redaction_filter
 # arm name -> calibration tag (the file `<root>/calibration/<tag>.json` names the detector,
 # its weights and its threshold)
 ARM_DETECTORS: dict[str, str] = {
+    "promptguard2": "promptguard2",
+    "modernbert": "modernbert",
     "permissions+promptguard2": "promptguard2",
     "permissions+modernbert": "modernbert",
 }
@@ -62,7 +69,7 @@ class DetectorDefense(Defense):
 
 
 DETECTOR_ARMS: dict[str, DetectorDefense] = {
-    name: DetectorDefense(name, enforce_permissions=True, detector=tag)
+    name: DetectorDefense(name, enforce_permissions=name.startswith("permissions+"), detector=tag)
     for name, tag in ARM_DETECTORS.items()
 }
 

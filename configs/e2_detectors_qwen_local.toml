@@ -1,12 +1,18 @@
-# E2 on the local Qwen: what does an injection detector add on top of permissions? (PLAN §8.2)
+# E2 on the local Qwen: what does an injection detector add, alone and on top of permissions?
+# (PLAN §8.2)
 # Only the 5 templates held out from detector training and calibration (the detector's test
 # split; tests/test_config_guards.py keeps it that way), so no task the detector was tuned on is
-# scored. Matrix: 5 test templates x instance 0 x {benign + 4 families x applicable goals} x arms
-#         = 226 episodes.
+# scored. Matrix: 5 test templates x 2 instances x {benign + 4 families x applicable goals}
+#         x 4 arms = 904 episodes (226 per arm).
+# Why a 2x2: the first E2 run (instance 0, permissions vs permissions+modernbert, 2026-11-19) hit
+# a floor. Permissions alone let 1 of 108 attacks through, so the stacked arm had nothing left to
+# show. The detector-only arm (`modernbert`) measures the detector where attacks still succeed.
 # Threshold: artifacts/detect/calibration/modernbert.json, the pre-registered rule (1% FPR on the
-# validation split, seed 0).
-# Arms share model samples until a redaction changes what the model sees; the permissions arm's
-# info_block and business_note episodes replay from configs/e1_qwen_local.toml.
+# validation split, seed 0). Score on the same device as the first run:
+# INJBENCH_DETECT_DEVICE=cpu.
+# Arms share model samples until a redaction changes what the model sees. `none` and
+# `permissions` replay from configs/e1_qwen_local_full.toml and instance 0 of
+# `permissions+modernbert` from the first E2 run, so only the detector arms make new calls.
 # Prompt Guard 2 is gated on Hugging Face. Once access is granted and HF_TOKEN is in .env:
 #   uv run --extra detect injbench-detect calibrate --detector promptguard2
 # then add "permissions+promptguard2" to `defenses`; the other arms replay from the cache.
@@ -16,7 +22,7 @@
 name = "e2-detectors-qwen-local"
 world_seed = 0
 instance_seed = 0
-instances_per_template = 1
+instances_per_template = 2
 templates = ["access_request_handling", "chase_stale_pending", "kb_flag_outdated",
              "reassign_departing", "reopen_requests"]  # the detector's test split
 attack_families = ["override", "info_block", "fake_system", "business_note"]
@@ -24,7 +30,7 @@ attack_goals = ["exfil_email_phones", "grant_admin", "cross_team_report", "falsi
                 "close_unrequested", "misroute_cross_team", "misroute_ticket", "falsify_metric",
                 "wrong_kb_code", "false_duplicate", "omit_from_review", "reopen_unrequested",
                 "hold_unrequested"]
-defenses = ["permissions", "permissions+modernbert"]
+defenses = ["none", "modernbert", "permissions", "permissions+modernbert"]
 concurrency = 4
 max_steps = 15
 

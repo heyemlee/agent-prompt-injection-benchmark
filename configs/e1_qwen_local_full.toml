@@ -2,7 +2,7 @@
 # e1_qwen_siliconflow.toml with the 4 arms of e1_qwen_local.toml). 4,072 episodes; the 1,060 of
 # e1_qwen_local.toml replay from the cache.
 # Arms and model block are those of e1_qwen_local.toml; its header says why base64 is left out.
-# Took 10.5 hours on the M4 Max with E1 cached (NOTE-local-qwen-run.md, Results).
+# Took 10.5 hours on the M4 Max with E1 cached; results in the README.
 #   uv run injbench run configs/e1_qwen_local_full.toml --dry-run
 #   uv run injbench run configs/e1_qwen_local_full.toml
 [run]

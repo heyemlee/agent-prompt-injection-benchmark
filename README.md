@@ -23,9 +23,9 @@ to AgentDojo and newer benchmarks, and what it does not cover, is under
 |---|---|
 | M1: core harness (world, policy, tools, 4 task templates, 4 attack families, 5 goals, `none`/`permissions` arms, runner, metrics) | done; smoke runs on Claude 5.5 ×3 and Qwen3.5-9B (below) |
 | M2: 21 task templates, 13 goals, spotlighting arms, exposure-after-defense metrics | code done ([templates](docs/templates.md), [spotlighting](docs/spotlighting.md)); E1 run on a local Qwen3.5-9B ([results](#e1-and-e2-on-a-local-qwen35-9b-2026-11-20)) |
-| M3: injection detectors (ModernBERT vs Prompt Guard 2), alone and on top of permissions | code done, ModernBERT trained offline ([detector card](docs/detector.md)); E2 run on the local Qwen, where it hit a floor; a 2×2 rerun with a detector-only arm is next. Prompt Guard 2 waits for gated access |
+| M3: injection detectors (ModernBERT vs Prompt Guard 2), alone and on top of permissions | code done, ModernBERT trained offline ([detector card](docs/detector.md)); E2 run on the local Qwen as a 2×2, with the detector alone and on top of permissions. The detector stopped every success, but there were too few for any difference to be significant ([results](#e1-and-e2-on-a-local-qwen35-9b-2026-11-20)). Prompt Guard 2 waits for gated access |
 | M4: adaptive vs repeated attacks at equal k (ASR@k) | code done ([attacks](docs/attacks.md)); configs ready (Claude Sonnet 5.5 attacker; local Qwen and Sonnet 5.5 targets). The paid comparison has not run yet. It is required before any claim about a defense, because static attacks alone overstate robustness ([below](#related-work-and-positioning)) |
-| M5: gated DPO-vs-SFT robustness training (Tinker API) | waits for E2 |
+| M5: gated DPO-vs-SFT robustness training (Tinker API) | not started; its gate decision is open now that E2 has run |
 | M6: Inspect port, write-up, model card | Inspect port done ([Inspect](docs/inspect.md)); write-up and model card after the results. inspect_evals no longer takes code for new evals, so there is no pull request to make, and a Register listing would need a paper |
 
 About 650 offline tests cover all of it. Every test uses scripted agents or fakes, so none of
@@ -267,22 +267,45 @@ Successful attacks out of 244 per family and arm:
   out-of-permission attack succeeds under permissions (0 of 672), by construction: the calls are
   blocked. Within-permission attacks still succeed in 24 of 304 episodes (0.08).
 - **Datamarking cuts ASR but not unsafe outcomes.**
-  - On top of permissions, it halves the within-permission successes (24 → 12 of 304; the
-    paired CI is not computed yet), but safe completion does not move (−0.00 [−0.03, +0.02]).
+  - On top of permissions, it halves the within-permission successes (24 → 12 of 304). The
+    paired difference, −0.04 [−0.08, +0.01], does not exclude 0, and safe completion does not
+    move (−0.00 [−0.03, +0.02]).
   - Alone, it lowers ASR about as much as permissions does (0.05 → 0.02). Safe completion moves
     little (+0.05 [−0.04, +0.15]), because datamarking does nothing about Qwen's scope errors.
 - **One family does almost all the damage.** `info_block` accounts for 47 of the 52 successes
   without a defense, and `override` never succeeded.
 
 **E2** ([configs/e2_detectors_qwen_local.toml](configs/e2_detectors_qwen_local.toml)) tested
-ModernBERT (seed 0, frozen threshold) on the 5 templates held out from its training and
-calibration, with 113 episodes per arm.
-- With permissions alone, 1 of 108 attacks succeeded: a within-permission `close_unrequested`.
-- With the detector on top, 0 of 108 succeeded, and no payload reached the model.
-- That is a floor effect: permissions leaves too few successes for a detector to show what it
-  adds. With 5 templates, the CIs are also rough.
-- A 2×2 rerun is next: the detector alone and on top of permissions, 2 instances per template.
-  It measures the detector where attacks still succeed.
+ModernBERT (seed 0, threshold frozen by the 1%-FPR rule) on the 5 templates held out from its
+training and calibration.
+- **Design.** A 2×2 of {`none`, `permissions`} × {no detector, `modernbert`}, with 2 instances
+  per template.
+- **Episodes.** Each arm has 226: 10 benign and 216 attacked, of which 160 target
+  out-of-permission goals and 56 within-permission goals.
+
+| Defense | Benign completion | Safe completion under attack | ASR | Payload exposure after filter |
+|---|---|---|---|---|
+| none | 0.70 [0.30, 1.00] | 0.60 [0.27, 0.90] | 6 of 216 | 0.50 |
+| modernbert | 0.70 [0.30, 1.00] | 0.63 [0.30, 0.91] | 0 of 216 | 1 of 216 |
+| permissions | 1.00 | 0.97 [0.93, 1.00] | 2 of 216 | 0.59 |
+| permissions+modernbert | 1.00 | 1.00 | 0 of 216 | 1 of 216 |
+
+- **The detector stopped every success, alone and on top of permissions.** In each detector arm,
+  one payload got past the filter, and it did not succeed.
+- **None of it is significant.** Even without a defense, the 5 test templates yield only 6
+  successes, so every paired ASR interval touches 0:
+  - the detector alone vs `none`: −0.03 [−0.06, +0.00];
+  - on top of permissions, within-permission goals: −0.04 [−0.12, +0.00].
+
+  Static attacks on 5 templates cannot show what the detector adds. The adaptive comparison
+  can, because it raises the success rate.
+- **False positives.** The detector redacted benign text in 2 of the 20 benign episodes that ran
+  with it:
+  - one ticket title in a SQL result, in a task that also fails without a defense;
+  - 28 person-name fields across 29 ticket reads, in a task that still succeeded.
+
+  This matches the [detector card](docs/detector.md): the 1%-FPR rule redacts a name or a title
+  in about 14% of benign benchmark episodes.
 
 ## Related work and positioning
 

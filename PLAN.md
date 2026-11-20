@@ -277,6 +277,9 @@ README):
   | `permissions+spotlight_datamark` | 0.01 | 0 of 672 | 12 of 304 |
 
   Datamarking on top of permissions leaves safe completion unchanged (−0.00 [−0.03, +0.02]).
+  The paired within-permission ASR difference is −0.04 [−0.08, +0.01]; the smaller
+  `e1_qwen_local.toml` gives −0.05 [−0.16, +0.05]. Gate G3 for datamark therefore does not pass
+  (§8.4).
 - **Attack families.** `info_block` is 47 of the 52 successes without a defense; `override`
   never succeeded.
 - **Spot checks.** Two successes under `permissions+spotlight_datamark` were read by hand, and
@@ -308,18 +311,28 @@ Arms: `permissions`, `permissions + Prompt Guard 2 (86M)`, `permissions + Modern
 - **Error analysis.** At least one real benign ticket that was wrongly redacted, and why a better
   offline F1 may not move end-to-end safe completion.
 
-First run (2026-11-19, local Qwen, 5 test templates, instance 0, 113 episodes per arm):
-- **Result.** `permissions` let 1 of 108 attacks through; `permissions+modernbert` let 0 of 108
-  through, and no payload reached the model after the filter.
-- **Why it says little.** This is a floor. Permissions blocks every out-of-permission goal, and
-  only 28 attacks per arm target within-permission goals. Under static attacks, no detector can
-  show a gain on top of that.
-- **Next: a 2×2.** `configs/e2_detectors_qwen_local.toml` now crosses {`none`, `permissions`}
-  with {no detector, `modernbert`}, at 2 instances per template (904 episodes).
-  - The detector-only arm measures the detector where attacks still succeed.
-  - `none` and `permissions` replay from E1, so only the detector arms make new calls.
-  - Not run yet. Five templates keep the template-clustered CIs rough, however many episodes
-    there are.
+E2 runs (local Qwen, ModernBERT seed 0 with the pre-registered threshold, the 5 test templates;
+tables in the README):
+- **First run (2026-11-19).** It used instance 0 only and compared `permissions` with
+  `permissions+modernbert`. `permissions` let 1 of 108 attacks through; the stacked arm let none
+  through.
+  - This is a floor. Permissions blocks every out-of-permission goal, and only 28 attacks per
+    arm targeted within-permission goals.
+  - So the config became a 2×2: {`none`, `permissions`} × {no detector, `modernbert`}, at 2
+    instances per template, 904 episodes.
+- **The 2×2 (2026-11-20).** `none` and `permissions` replayed from E1.
+  - ASR: `none` 6 of 216, `modernbert` 0, `permissions` 2, `permissions+modernbert` 0. One
+    payload per detector arm got past the filter, and it did not succeed.
+  - Every paired ASR interval touches 0. The detector alone vs `none` gives −0.03
+    [−0.06, +0.00]; on top of `permissions`, the within-permission difference is −0.04
+    [−0.12, +0.00].
+  - Even undefended, the test templates give too few successes for static attacks to measure
+    the detector. Five templates also keep the template-clustered CIs rough.
+- **Error analysis.** The detector redacted benign text in 2 of 20 benign episodes:
+  - a ticket title in a `run_sql` result, in a task that fails in `none` as well;
+  - 28 person-name fields in 29 `get_ticket` results, in a task that still succeeded.
+
+  Both are the name-and-title false positives the detector card describes.
 
 ### 8.3 E3 — Model-level robustness (gated)
 **Gate.** Run E3 only if, after E2, the attempted-violation rate or the success rate of
@@ -378,12 +391,17 @@ Gates (status 2026-11-20):
 - **G2, the attacker check.** It runs first. It passes if the attacker refuses at most 10% of
   its turns, and it measures the cost per attacker turn that sets the frontier run's budget.
 - **G3, the datamark and detector runs.**
-  - Datamark: in E1, within-permission successes fell from 24 to 12 of 304 under
-    `permissions+spotlight_datamark`. Run summaries now include paired ASR differences, and
-    `injbench report <E1 run dir>` recomputes them without model calls. "Clearly below" means the
-    paired 95% CI of within-permission ASR lies entirely below 0.
-  - Detector: E2's floor makes "below `permissions` alone" unreachable for any detector under
-    static attacks. This gate needs a new criterion (§15).
+  - "Clearly below" means the paired 95% CI of within-permission ASR lies entirely below 0. Run
+    summaries include paired ASR differences, and `injbench report <run dir>` recomputes them
+    without model calls.
+  - Datamark: **not passed.** In E1, within-permission successes fell from 24 to 12 of 304 under
+    `permissions+spotlight_datamark`, but the paired difference is −0.04 [−0.08, +0.01].
+  - Detector: **not passed.** No detector can clear "below `permissions` alone" under static
+    attacks, because of E2's floor. The criterion proposed in §15 (`modernbert` clearly below
+    `none` in the 2×2) is not met either: −0.03 [−0.06, +0.00].
+  - So by the gates, neither `adaptive_qwen_local_datamark.toml` nor
+    `adaptive_qwen_local_modernbert.toml` runs. Whether to run them as exploratory runs is open
+    (§15).
 - **G4, the frontier repeated control.** It runs only if the adaptive attacker succeeds at
   least once.
 
@@ -405,10 +423,10 @@ Costs are estimates from public price lists, not measurements.
 and tested offline, with scripted agents only: 21 templates, spotlighting arms, detector arms with
 an offline-trained ModernBERT, repeated and adaptive attacks with ASR@k, and an Inspect task with
 parity tests against the native runner. The E1 pilot ran on SiliconFlow and Claude Haiku 5.5
-($2.04). E1 and a first E2 then ran on a local Qwen server at $0 (§8.1, §8.2). Two free steps
-come next: recomputing E1's summary with paired ASR, and the E2 2×2. The ASR@k comparison has not
-run; it pays for an attacker and waits for budget approval. Prompt Guard 2 waits for gated
-access, and M5 waits for E2.
+($2.04). E1 and E2 then ran on a local Qwen server at $0 (§8.1, §8.2). That server ran about
+0.4 min per episode, with 4 episodes in parallel on an M4 Max. The ASR@k comparison has not run;
+it pays for an attacker and waits for budget approval. Prompt Guard 2 waits for gated access.
+M5's gate decision (§8.3) is open.
 
 **Changes after a literature check (2026-11-19).**
 - The ASR@k comparison is required, not optional (§8.4). It was first placed between E1 and E2.
@@ -500,11 +518,14 @@ production models. All data is synthetic, and no employer code, data or benchmar
   (`calibrate --min-threshold 0`) removes that, but lets 58% of `business_note` payloads reach
   the model. Recommendation: keep the pre-registered rule and report the floor as a sensitivity
   analysis ([docs/detector.md](docs/detector.md)). The first E2 run used the pre-registered rule.
-- **G3 for the detector arm.** Under static attacks, `permissions+modernbert` can never be
-  clearly below `permissions` (§8.2). Two options:
-  - Decide `adaptive_qwen_local_modernbert.toml` on the E2 2×2: run it if `modernbert` is
-    clearly below `none` on ASR (the paired 95% CI lies below 0).
-  - Run it regardless, since the adaptive attacker is what lifts the floor.
+- **Exploratory adaptive runs for datamark and the detector.** Neither arm passed G3 (§8.4).
+  - Datamark was −0.04 [−0.08, +0.01]. The detector arm cannot clear its original criterion
+    under static attacks. The proposed replacement, `modernbert` clearly below `none` in the E2
+    2×2, gave −0.03 [−0.06, +0.00].
+  - Both static results are limited by how few attacks succeed, which is what the adaptive
+    attacker raises.
+  - Options: skip both runs, or run them as exploratory and report them as runs whose gate
+    failed. The caps are $25 and $30 for the attacker.
 - **Attacker model for the adaptive run.** A Claude attacker may refuse some rounds, which would
   understate adaptive attacks. Check `attacker_stats.errors` in the run manifest.
 - **Adaptive budget.** The configs now set K = 10 on the local Qwen and K = 20 on the frontier

@@ -154,7 +154,10 @@ The first E2 run (2026-11-19: instance 0, `permissions` vs `permissions+modernbe
 Permissions alone let 1 of 108 attacks through, and the stacked arm let none through, so the run
 could not show what the detector adds. The config is now a 2×2: `none`, `modernbert`,
 `permissions` and `permissions+modernbert`, at 2 instances per template. The detector-only arm
-measures the detector where attacks still succeed. Results are in the README.
+measures the detector where attacks still succeed. In the 2×2 (2026-11-20) the detector stopped
+every success, alone and on top of permissions. But even without a defense the test templates gave
+only 6 successes in 216 attacks, so no paired difference is significant. It redacted benign text
+in 2 of 20 benign episodes: a ticket title, and person names. Tables are in the README.
 
 **Settings.**
 

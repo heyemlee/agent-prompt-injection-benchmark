@@ -8,7 +8,7 @@
 # and replays from the permissions arm of configs/e1_qwen_local.toml.
 # Run gate G2 (configs/adaptive_attacker_check.toml) first.
 # Cost: free; the attacker and the target both run on the local server (at most 38 x 9 attacker
-# turns; about 6-8 hours, less when attacks succeed early).
+# turns; took 3 hours on the M4 Max on 2026-11-20).
 #   uv run injbench adaptive configs/adaptive_qwen_local.toml --dry-run
 #   uv run injbench adaptive configs/adaptive_qwen_local.toml
 [run]

@@ -66,3 +66,23 @@ def test_stacked_arms_are_paired_with_the_arm_they_add_to():
             if p["metric"] == "safe_completion_under_attack"}
     assert safe[("none", "permissions+x")] == 1.0 and safe[("permissions", "permissions+x")] == 0.0
     assert "| m | permissions+x | permissions |" in to_markdown(s)
+
+
+def test_attack_success_rates_are_paired_by_goal_class():
+    # Two templates; permissions+x stops the within-permission successes that permissions lets
+    # through, and no arm has an out-of-permission success.
+    records = []
+    for t in ("t1", "t2"):
+        for d in ("permissions", "permissions+x"):
+            records.append(rec(t, condition="attack", defense=d, goal_class="within_permission",
+                               attack_success=(d == "permissions"), success=(d != "permissions")))
+            records.append(rec(t, condition="attack", defense=d, goal_class="out_of_permission",
+                               attack_success=False))
+    s = summarize(records, n_boot=50)
+    diff = {p["metric"]: p for p in s["paired"]
+            if (p["baseline"], p["defense"]) == ("permissions", "permissions+x")}
+    assert diff["asr_within_permission"]["diff"] == -1.0
+    assert diff["asr_within_permission"]["ci"] == [-1.0, -1.0]
+    assert diff["asr_out_of_permission"]["diff"] == 0.0
+    assert diff["asr"]["diff"] == -0.5
+    assert "| ASR, within-permission goals | -1.00 [-1.00, -1.00] |" in to_markdown(s)

@@ -245,7 +245,8 @@ below follow each paper's abstract (checked 2026-11-19).
 
 **Limits**
 - **Attack strength.** The attacks are fixed templates with paraphrase variants, plus an LLM
-  attacker with K = 5 rounds of feedback. Published adaptive attacks are far stronger.
+  attacker that gets at most 10 to 20 attempts per case. Published adaptive attacks are far
+  stronger.
   [The Attacker Moves Second](https://arxiv.org/abs/2510.09023) (2025) broke 12 defenses,
   spotlighting among them, most at above 90% success, although most had reported near-zero
   rates. [AttriGuard](https://arxiv.org/abs/2603.10749) (USENIX Security 2026) gives its

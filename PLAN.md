@@ -293,18 +293,33 @@ E1 and E2 use fixed payload templates, and static suites overstate robustness:
 Two rules follow.
 - **The comparison is part of the core results.** No claim about a defense arm rests on E1 or E2
   alone. On a model that already resists the static templates (every Claude 5.5 run so far),
-  static ASR cannot separate the arms at all. Paid runs go in this order: E1, this comparison,
-  then E2.
-- **A claim is limited to the attack that ran.** The attacker is one LLM conversation with K = 5
-  feedback rounds per case. Published search attacks spend 200 to 800 queries per case, and
-  Nasr et al. needed a median of 13 to 58 queries for the first success on undefended models.
-  Results are therefore worded "at least one success within k attempts under a K-round adaptive
-  attacker". No arm is called robust or secure.
+  static ASR cannot separate the arms at all. E1 and E2 on the local Qwen cost nothing and run
+  first. This comparison follows: it pays for an attacker model, and two of its runs depend on
+  what E1 and E2 show.
+- **A claim is limited to the attack that ran.** The attacker is one LLM conversation per case.
+  A case gets up to K attempts: K = 10 on the local Qwen, K = 20 on the frontier target. Attempt
+  1 is the static payload, and the attacker writes the later ones from feedback. Published
+  search attacks spend 200 to 800 queries per case, and Nasr et al. needed a median of 13 to 58
+  queries for the first success on undefended models. Results are therefore worded "at least
+  one success within k attempts under a K-round adaptive attacker". No arm is called robust or
+  secure.
 
-`configs/adaptive_qwen.toml` (Qwen3.5-9B target, Claude Sonnet 5.5 attacker, cap $8) covers the
-four M1 templates with `none` and `permissions`. Before the run, add the spotlighting arm with
-the largest static drop in E1, and after E2 the better detector arm: those are the arms whose
-static numbers need this check. Details and limitations: [docs/attacks.md](docs/attacks.md).
+The five configs below all use a Claude Sonnet 5.5 attacker. The matrix and the budget cap of
+each are in its header.
+- `configs/adaptive_attacker_check.toml` runs first, on 4 cases. It checks that the attacker
+  writes payloads instead of refusing, and it measures what one attacker turn costs.
+- `configs/adaptive_qwen_local.toml` is the comparison on the local Qwen3.5-9B under
+  `permissions`, on the nine within-permission goals. The out-of-permission goals are left out:
+  `permissions` blocks those calls, so their realized ASR is 0 by construction.
+- `configs/adaptive_qwen_local_datamark.toml` and `configs/adaptive_qwen_local_modernbert.toml`
+  put a spotlighting arm and the detector arm under the same attacker. Each runs only if its arm
+  is clearly below `permissions` alone in E1 or E2: those are the arms whose static numbers
+  need this check.
+- `configs/adaptive_frontier.toml` targets Claude Sonnet 5.5, which the static templates have
+  not moved.
+
+[docs/attacks.md](docs/attacks.md) describes the driver, its limitations and the earlier
+SiliconFlow config (`configs/adaptive_qwen.toml`, 5 attempts).
 
 ## 9. Milestones
 
@@ -327,7 +342,8 @@ parity tests against the native runner. None of the paid experiments (E1, E2, th
 comparison) has run yet. Prompt Guard 2 waits for gated access, and M5 waits for E2.
 
 **Changes after a literature check (2026-11-19).**
-- The ASR@k comparison is required, not optional, and runs between E1 and E2 (§8.4).
+- The ASR@k comparison is required, not optional (§8.4). It was first placed between E1 and E2.
+  E1 and E2 now run first, because they moved to a local Qwen server and cost nothing.
 - M6 no longer includes an inspect_evals pull request. inspect_evals stopped accepting code for
   new evals: an eval now stays in its author's repository and is listed in the Inspect Evals
   Register. The submission form asks for the arXiv URL of the paper the eval implements, and
@@ -417,8 +433,8 @@ production models. All data is synthetic, and no employer code, data or benchmar
   analysis ([docs/detector.md](docs/detector.md)). Decide before the paid E2 run.
 - **Attacker model for the adaptive run.** A Claude attacker may refuse some rounds, which would
   understate adaptive attacks. Check `attacker_stats.errors` in the run manifest.
-- **Adaptive budget.** K = 5 is small next to published budgets (§8.4). Decide before the paid
-  run whether to raise K, for example to 20, on a subset of cases. The attacker's cost grows at
-  least linearly with K.
+- **Adaptive budget.** The configs now set K = 10 on the local Qwen and K = 20 on the frontier
+  target, up from 5 (§8.4). Both are still small next to published budgets. Confirm them before
+  the paid runs: the attacker's cost grows at least linearly with K.
 - **Prompt Guard 2 access.** Gated on Hugging Face (Meta approves manually); needs `HF_TOKEN` in
   `.env`.

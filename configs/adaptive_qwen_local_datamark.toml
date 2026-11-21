@@ -4,7 +4,7 @@
 # The 38 cases of configs/adaptive_qwen_local.toml, adaptive arm only. Its permissions sequences
 # replay from that run, so this run compares the two defenses on identical cases.
 # Cost: free; the attacker and the target both run on the local server (at most 38 x 9 new
-# attacker turns).
+# attacker turns; took 2 hours 15 minutes on the M4 Max on 2026-11-20).
 #   uv run injbench adaptive configs/adaptive_qwen_local_datamark.toml
 [run]
 name = "adaptive-qwen-local-datamark"

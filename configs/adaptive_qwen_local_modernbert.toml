@@ -4,7 +4,8 @@
 # = 28 cases per defense, adaptive arm only. The permissions info_block sequences replay from
 # configs/adaptive_qwen_local.toml.
 # Cost: free; the attacker and the target both run on the local server (at most 2 x 28 x 9
-# attacker turns, of which the permissions info_block ones replay).
+# attacker turns, of which the permissions info_block ones replay; took 2 hours on the M4 Max
+# on 2026-11-20, with the detector on the CPU).
 #   uv run --extra detect injbench adaptive configs/adaptive_qwen_local_modernbert.toml
 [run]
 name = "adaptive-qwen-local-modernbert"
